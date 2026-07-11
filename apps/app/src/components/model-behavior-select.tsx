@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Gauge } from "lucide-react";
 import { motion, type Transition } from "motion/react";
 
@@ -107,8 +107,9 @@ export function ModelBehaviorSelect({
   const selectedPercent = percentForIndex(selectedIndex, items.length);
   const [position, setPosition] = useState(selectedPercent);
   const [isDragging, setIsDragging] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isDragging) setPosition(selectedPercent);
   }, [isDragging, selectedPercent]);
 
@@ -133,7 +134,13 @@ export function ModelBehaviorSelect({
     : { type: "spring", stiffness: 410, damping: 30, mass: 0.55 };
 
   return (
-    <Popover>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) setPosition(selectedPercent);
+        setOpen(nextOpen);
+      }}
+    >
       <Tooltip>
         <TooltipTrigger
           render={
@@ -174,6 +181,7 @@ export function ModelBehaviorSelect({
             <div className="absolute inset-x-2.5 top-1/2 h-10 -translate-y-1/2 overflow-hidden rounded-full bg-gray-4">
               <motion.div
                 aria-hidden
+                initial={false}
                 animate={{ width: `${position}%`, backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
                 transition={{
                   width: motionTransition,
@@ -211,6 +219,7 @@ export function ModelBehaviorSelect({
             </div>
             <motion.span
               aria-hidden
+              initial={false}
               animate={{ left: `calc(0.625rem + (100% - 1.25rem) * ${position / 100})`, scale: isDragging ? 1.06 : 1 }}
               transition={motionTransition}
               className="pointer-events-none absolute top-1/2 z-10 size-12 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gray-3 bg-dls-surface shadow-[0_4px_10px_rgba(51,37,115,0.2)]"
