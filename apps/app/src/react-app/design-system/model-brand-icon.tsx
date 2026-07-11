@@ -5,37 +5,25 @@ import { ProviderIcon } from "./provider-icon";
 type ModelBrand = {
   file: string;
   label: string;
-  prefix: string;
+  prefixes: readonly string[];
   monochrome?: boolean;
 };
 
-type ModelProviderFamily = {
-  prefix: string;
-  providerId: "anthropic" | "openai";
-};
-
 const modelBrands: readonly ModelBrand[] = [
-  { prefix: "openrouter/", file: "openrouter.svg", label: "OpenRouter", monochrome: true },
-  { prefix: "z-ai/", file: "zhipu-color.svg", label: "Zhipu AI" },
-  { prefix: "moonshotai/", file: "kimi-color.svg", label: "Kimi" },
-  { prefix: "tencent/", file: "hunyuan-color.svg", label: "Tencent Hunyuan" },
-  { prefix: "deepseek/", file: "deepseek.svg", label: "DeepSeek", monochrome: true },
-  { prefix: "minimax/", file: "minimax.svg", label: "MiniMax", monochrome: true },
-];
-
-const modelProviderFamilies: readonly ModelProviderFamily[] = [
-  { prefix: "anthropic/", providerId: "anthropic" },
-  { prefix: "openai/", providerId: "openai" },
+  { prefixes: ["openrouter/", "fusion"], file: "openrouter.svg", label: "OpenRouter", monochrome: true },
+  { prefixes: ["z-ai/", "glm-"], file: "zhipu-color.svg", label: "Zhipu AI" },
+  { prefixes: ["moonshotai/", "kimi-"], file: "kimi-color.svg", label: "Kimi" },
+  { prefixes: ["tencent/", "hunyuan", "hy3"], file: "hunyuan-color.svg", label: "Tencent Hunyuan" },
+  { prefixes: ["deepseek/", "deepseek"], file: "deepseek.svg", label: "DeepSeek", monochrome: true },
+  { prefixes: ["minimax/", "minimax"], file: "minimax.svg", label: "MiniMax", monochrome: true },
+  { prefixes: ["google/", "gemini"], file: "gemini-color.svg", label: "Google Gemini" },
+  { prefixes: ["anthropic/", "claude"], file: "claude-color.svg", label: "Claude" },
+  { prefixes: ["openai/", "gpt-", "o1", "o3", "o4"], file: "openai.svg", label: "OpenAI", monochrome: true },
 ];
 
 export function getModelBrand(modelId: string): ModelBrand | null {
   const normalizedModelId = modelId.trim().toLowerCase();
-  return modelBrands.find((brand) => normalizedModelId.startsWith(brand.prefix)) ?? null;
-}
-
-export function getModelProviderFamily(modelId: string) {
-  const normalizedModelId = modelId.trim().toLowerCase();
-  return modelProviderFamilies.find((family) => normalizedModelId.startsWith(family.prefix)) ?? null;
+  return modelBrands.find((brand) => brand.prefixes.some((prefix) => normalizedModelId.startsWith(prefix))) ?? null;
 }
 
 type ModelBrandIconProps = {
@@ -54,12 +42,11 @@ export function ModelBrandIcon({
   size = 16,
 }: ModelBrandIconProps) {
   const brand = getModelBrand(modelId);
-  const providerFamily = getModelProviderFamily(modelId);
 
   if (!brand) {
     return (
       <ProviderIcon
-        providerId={providerFamily?.providerId ?? providerId}
+        providerId={providerId}
         providerName={providerName}
         className={className}
         size={size}

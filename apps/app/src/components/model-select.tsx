@@ -6,7 +6,6 @@ import { useNavigate } from "react-router-dom";
 
 import type { ModelOption, ModelRef } from "@/app/types";
 import { ModelBrandIcon } from "@/react-app/design-system/model-brand-icon";
-import { ProviderIcon } from "@/react-app/design-system/provider-icon";
 import {
   Popover,
   PopoverContent,
@@ -380,7 +379,8 @@ export function ModelSelect({
                         onClick={() => handleSelect(option)}
                         data-checked={isSameModel(value, option)}
                       >
-                        <ProviderIcon
+                        <ModelBrandIcon
+                          modelId={option.modelID}
                           providerId={option.providerID}
                           providerName={option.description}
                           className="size-3.5 opacity-70"
