@@ -1,8 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Gauge } from "lucide-react";
-import { motion, type Transition } from "motion/react";
+import { motion, useMotionValue, useTransform, type Transition } from "motion/react";
 
 import { t } from "@/i18n";
 import {
@@ -105,29 +105,46 @@ export function ModelBehaviorSelect({
   const selectedIndex = Math.max(0, items.findIndex((option) => option.value === rawValue));
   const selected = items[selectedIndex];
   const selectedPercent = percentForIndex(selectedIndex, items.length);
-  const [position, setPosition] = useState(selectedPercent);
+  const position = useMotionValue(selectedPercent);
+  const fillWidth = useTransform(position, (current) => `${current}%`);
+  const thumbLeft = useTransform(
+    position,
+    (current) => `calc(${current}% + ${0.625 - (1.25 * current) / 100}rem)`,
+  );
+  const rangeRef = useRef<HTMLInputElement>(null);
+  const committedValueRef = useRef(selected?.value ?? null);
+  const [visualIndex, setVisualIndex] = useState(selectedIndex);
   const [isDragging, setIsDragging] = useState(false);
   const [open, setOpen] = useState(false);
 
   useLayoutEffect(() => {
-    if (!isDragging) setPosition(selectedPercent);
-  }, [isDragging, selectedPercent]);
+    if (isDragging) return;
+    position.set(selectedPercent);
+    setVisualIndex(selectedIndex);
+    committedValueRef.current = selected?.value ?? null;
+    if (rangeRef.current) rangeRef.current.value = String(Math.round(selectedPercent));
+  }, [isDragging, position, selected?.value, selectedIndex, selectedPercent]);
 
   if (items.length < 2 || !selected) {
     return null;
   }
 
-  const visualIndex = indexForPercent(position, items.length);
   const visualSelected = items[visualIndex] ?? selected;
   const effortTheme = getEffortTheme(visualSelected.value, visualSelected.label);
-  const visibleParticleCount = Math.round((position / 100) * energyParticles.length);
+  const visibleParticleCount = Math.round(
+    (percentForIndex(visualIndex, items.length) / 100) * energyParticles.length,
+  );
   const updatePosition = (nextPosition: number) => {
     const boundedPosition = Math.min(100, Math.max(0, nextPosition));
     const nextIndex = indexForPercent(boundedPosition, items.length);
     const next = items[nextIndex];
 
-    setPosition(boundedPosition);
-    if (next && next.value !== selected.value) onChange(next.value);
+    position.set(boundedPosition);
+    if (nextIndex !== visualIndex) setVisualIndex(nextIndex);
+    if (next && next.value !== committedValueRef.current) {
+      committedValueRef.current = next.value;
+      onChange(next.value);
+    }
   };
   const motionTransition: Transition = isDragging
     ? { duration: 0 }
@@ -137,7 +154,11 @@ export function ModelBehaviorSelect({
     <Popover
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen) setPosition(selectedPercent);
+        if (nextOpen) {
+          position.set(selectedPercent);
+          setVisualIndex(selectedIndex);
+          if (rangeRef.current) rangeRef.current.value = String(Math.round(selectedPercent));
+        }
         setOpen(nextOpen);
       }}
     >
@@ -182,12 +203,9 @@ export function ModelBehaviorSelect({
               <motion.div
                 aria-hidden
                 initial={false}
-                animate={{ width: `${position}%`, backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
-                transition={{
-                  width: motionTransition,
-                  backgroundPosition: { duration: 7, ease: "linear", repeat: Infinity },
-                }}
-                style={{ backgroundImage: effortTheme.track }}
+                animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+                transition={{ backgroundPosition: { duration: 7, ease: "linear", repeat: Infinity } }}
+                style={{ backgroundImage: effortTheme.track, width: fillWidth }}
                 className="relative h-full overflow-hidden rounded-full bg-[length:180%_100%]"
               >
                 <span className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.03),rgba(255,255,255,0.2),rgba(255,255,255,0.03))]" />
@@ -220,8 +238,9 @@ export function ModelBehaviorSelect({
             <motion.span
               aria-hidden
               initial={false}
-              animate={{ left: `calc(0.625rem + (100% - 1.25rem) * ${position / 100})`, scale: isDragging ? 1.06 : 1 }}
+              animate={{ scale: isDragging ? 1.06 : 1 }}
               transition={motionTransition}
+              style={{ left: thumbLeft }}
               className="pointer-events-none absolute top-1/2 z-10 size-12 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gray-3 bg-dls-surface shadow-[0_4px_10px_rgba(51,37,115,0.2)]"
             >
               <motion.span
@@ -232,16 +251,17 @@ export function ModelBehaviorSelect({
               />
             </motion.span>
             <input
+              ref={rangeRef}
               type="range"
               min="0"
               max="100"
               step="1"
-              value={Math.round(position)}
+              defaultValue={Math.round(selectedPercent)}
               disabled={disabled}
               aria-label={t("model_behavior.title_reasoning_effort")}
               aria-valuetext={visualSelected.label}
               className="absolute inset-x-2.5 inset-y-0 z-20 h-full w-[calc(100%-1.25rem)] cursor-pointer opacity-0 disabled:cursor-not-allowed"
-              onChange={(event) => updatePosition(event.currentTarget.valueAsNumber)}
+              onInput={(event) => updatePosition(event.currentTarget.valueAsNumber)}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
                 setIsDragging(true);
