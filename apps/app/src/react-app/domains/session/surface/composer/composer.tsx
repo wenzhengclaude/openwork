@@ -1624,24 +1624,25 @@ export function ReactSessionComposer(props: ComposerProps) {
                   ) : null}
                 </div>
 
-                <ModelSelect
-                  open={props.modelPickerOpen}
-                  value={props.selectedModel}
-                  onOpenChange={props.onModelPickerOpenChange}
-                  onChange={props.onModelChange}
-                  disabled={props.busy}
-                />
+                <div className="flex h-9 items-center rounded-full bg-gray-3 pr-1">
+                  <ModelSelect
+                    open={props.modelPickerOpen}
+                    value={props.selectedModel}
+                    onOpenChange={props.onModelPickerOpenChange}
+                    onChange={props.onModelChange}
+                    disabled={props.busy}
+                  />
+                  <ModelBehaviorSelect
+                    value={props.modelVariant}
+                    label={props.modelVariantLabel}
+                    options={props.modelBehaviorOptions}
+                    onChange={props.onModelVariantChange}
+                    disabled={props.busy}
+                  />
+                </div>
                 {props.modelUnavailable ? (
                   <span className="text-xs font-medium text-red-10">Model no longer available</span>
                 ) : null}
-
-                <ModelBehaviorSelect
-                  value={props.modelVariant}
-                  label={props.modelVariantLabel}
-                  options={props.modelBehaviorOptions}
-                  onChange={props.onModelVariantChange}
-                  disabled={props.busy}
-                />
               </div>
 
               {/*

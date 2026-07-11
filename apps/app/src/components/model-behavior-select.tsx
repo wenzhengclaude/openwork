@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Gauge } from "lucide-react";
+import { ChevronDown, ChevronRight, Gauge } from "lucide-react";
 import { motion, type Transition } from "motion/react";
 
 import { t } from "@/i18n";
@@ -51,6 +51,41 @@ const energyParticles = [
   { left: 79, top: 60, size: 3, delay: 0.5, duration: 3 },
 ];
 
+type EffortTheme = {
+  accent: string;
+  track: string;
+};
+
+function getEffortTheme(value: string, label: string): EffortTheme {
+  const effort = `${value} ${label}`.toLowerCase();
+
+  if (/xhigh|max|maximum|最大|最高/.test(effort)) {
+    return {
+      accent: "#7c3aed",
+      track: "linear-gradient(102deg, #5141d8 0%, #8c4bea 100%)",
+    };
+  }
+
+  if (/high|deep|extended|高级|深度|扩展/.test(effort)) {
+    return {
+      accent: "#3b82f6",
+      track: "linear-gradient(102deg, #3f8ff2 0%, #6baaf8 100%)",
+    };
+  }
+
+  if (/medium|balanced|standard|中|标准/.test(effort)) {
+    return {
+      accent: "#0f8bc3",
+      track: "linear-gradient(102deg, #238fd7 0%, #4dbbe8 100%)",
+    };
+  }
+
+  return {
+    accent: "#149b8b",
+    track: "linear-gradient(102deg, #159a8c 0%, #3ac7ad 100%)",
+  };
+}
+
 export function ModelBehaviorSelect({
   value,
   label,
@@ -83,9 +118,8 @@ export function ModelBehaviorSelect({
 
   const visualIndex = indexForPercent(position, items.length);
   const visualSelected = items[visualIndex] ?? selected;
-  const description = visualSelected.description ?? t("model_behavior.desc_generic", {
-    label: visualSelected.label.toLowerCase(),
-  });
+  const effortTheme = getEffortTheme(visualSelected.value, visualSelected.label);
+  const visibleParticleCount = Math.round((position / 100) * energyParticles.length);
   const updatePosition = (nextPosition: number) => {
     const boundedPosition = Math.min(100, Math.max(0, nextPosition));
     const nextIndex = indexForPercent(boundedPosition, items.length);
@@ -107,69 +141,74 @@ export function ModelBehaviorSelect({
               type="button"
               disabled={disabled}
               aria-label={t("composer.behavior_label")}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-gray-3 px-3 text-sm font-medium text-gray-12 transition-colors hover:bg-gray-4 disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-transparent px-2.5 text-sm font-medium text-gray-12 transition-colors hover:bg-gray-4 disabled:pointer-events-none disabled:opacity-60"
             >
-              <Gauge className="size-3.5 text-violet-10" />
-              <span className="max-w-28 truncate text-violet-11">{selected.label || label}</span>
+              <Gauge className="size-3.5" style={{ color: effortTheme.accent }} />
+              <span className="max-w-28 truncate" style={{ color: effortTheme.accent }}>{selected.label || label}</span>
               <ChevronDown className="size-4 text-gray-10" />
             </PopoverTrigger>
           }
         />
         <TooltipContent>{t("composer.behavior_label")}</TooltipContent>
       </Tooltip>
-      <PopoverContent side="top" sideOffset={10} align="start" className="w-[22rem] max-w-[calc(100vw-2rem)] rounded-[20px] border border-gray-5 bg-dls-surface p-0 shadow-[0_20px_40px_-24px_rgba(19,18,41,0.38)]">
+      <PopoverContent side="top" sideOffset={10} align="end" className="w-[22rem] max-w-[calc(100vw-2rem)] rounded-[20px] border border-gray-5 bg-dls-surface p-0 shadow-[0_20px_40px_-24px_rgba(19,18,41,0.38)]">
         <div className="px-5 pb-5 pt-4 sm:px-6">
-          <motion.p
+          <motion.div
             key={visualSelected.value}
             initial={{ opacity: 0, y: 5, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             transition={{ duration: 0.2 }}
-            className="min-h-6 text-center text-base font-medium"
+            className="flex min-h-6 items-center gap-1 text-base font-medium"
           >
             <span
-              className="inline-block text-transparent"
+              className="inline-block"
               style={{
-                backgroundImage: "linear-gradient(96deg, #4f46e5 0%, #a855f7 100%)",
-                backgroundClip: "text",
-                WebkitBackgroundClip: "text",
+                color: effortTheme.accent,
               }}
             >
-              {description}
+              {visualSelected.label}
             </span>
-          </motion.p>
+            <ChevronRight className="size-4 text-gray-9" />
+          </motion.div>
           <div className="relative mt-4 h-12 touch-none select-none px-2.5">
-            <motion.div
-              aria-hidden
-              animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
-              transition={{ duration: 7, ease: "linear", repeat: Infinity }}
-              className="absolute inset-x-2.5 top-1/2 h-10 -translate-y-1/2 overflow-hidden rounded-full bg-[length:180%_100%] [background-image:linear-gradient(102deg,#2f51d5_0%,#6444e7_46%,#a34ff7_100%)]"
-            >
-              <span className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.03),rgba(255,255,255,0.2),rgba(255,255,255,0.03))]" />
-              {energyParticles.map((particle) => (
-                <motion.span
-                  key={particle.left}
-                  animate={{
-                    opacity: [0.25, 0.95, 0.25],
-                    x: [0, 16, 0],
-                    y: [0, -2, 0],
-                    scale: [0.75, 1.2, 0.75],
-                  }}
-                  transition={{
-                    duration: particle.duration,
-                    delay: particle.delay,
-                    ease: "easeInOut",
-                    repeat: Infinity,
-                  }}
-                  className="absolute rounded-full bg-white/85 shadow-[0_0_8px_rgba(255,255,255,0.8)]"
-                  style={{
-                    left: `${particle.left}%`,
-                    top: `${particle.top}%`,
-                    width: particle.size,
-                    height: particle.size,
-                  }}
-                />
-              ))}
-            </motion.div>
+            <div className="absolute inset-x-2.5 top-1/2 h-10 -translate-y-1/2 overflow-hidden rounded-full bg-gray-4">
+              <motion.div
+                aria-hidden
+                animate={{ width: `${position}%`, backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
+                transition={{
+                  width: motionTransition,
+                  backgroundPosition: { duration: 7, ease: "linear", repeat: Infinity },
+                }}
+                style={{ backgroundImage: effortTheme.track }}
+                className="relative h-full overflow-hidden rounded-full bg-[length:180%_100%]"
+              >
+                <span className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.03),rgba(255,255,255,0.2),rgba(255,255,255,0.03))]" />
+                {energyParticles.slice(0, visibleParticleCount).map((particle) => (
+                  <motion.span
+                    key={particle.left}
+                    animate={{
+                      opacity: [0.25, 0.95, 0.25],
+                      x: [0, 10, 0],
+                      y: [0, -2, 0],
+                      scale: [0.75, 1.2, 0.75],
+                    }}
+                    transition={{
+                      duration: particle.duration,
+                      delay: particle.delay,
+                      ease: "easeInOut",
+                      repeat: Infinity,
+                    }}
+                    className="absolute rounded-full bg-white/85 shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+                    style={{
+                      left: `${particle.left}%`,
+                      top: `${particle.top}%`,
+                      width: particle.size,
+                      height: particle.size,
+                    }}
+                  />
+                ))}
+              </motion.div>
+            </div>
             <motion.span
               aria-hidden
               animate={{ left: `calc(0.625rem + (100% - 1.25rem) * ${position / 100})`, scale: isDragging ? 1.06 : 1 }}
@@ -179,7 +218,8 @@ export function ModelBehaviorSelect({
               <motion.span
                 animate={{ opacity: isDragging ? 0.18 : 0, scale: isDragging ? 1 : 0.7 }}
                 transition={{ duration: 0.16 }}
-                className="absolute inset-2 rounded-full border border-violet-7"
+                className="absolute inset-2 rounded-full border"
+                style={{ borderColor: effortTheme.accent }}
               />
             </motion.span>
             <input
@@ -204,17 +244,6 @@ export function ModelBehaviorSelect({
               onPointerCancel={() => setIsDragging(false)}
               onBlur={() => setIsDragging(false)}
             />
-          </div>
-          <div className="mt-2 flex justify-center">
-            <motion.span
-              key={visualSelected.value}
-              initial={{ opacity: 0, y: 3 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.16 }}
-              className="rounded-full bg-gray-3 px-3 py-0.5 text-xs font-medium text-violet-11"
-            >
-              {visualSelected.label}
-            </motion.span>
           </div>
         </div>
       </PopoverContent>
