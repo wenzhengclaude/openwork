@@ -69,7 +69,7 @@ type ComposerProps = {
   attachmentsDisabledReason: string | null;
   modelVariantLabel: string;
   modelVariant: string | null;
-  modelBehaviorOptions?: { value: string | null; label: string }[];
+  modelBehaviorOptions?: { value: string | null; label: string; description?: string }[];
   onModelVariantChange: (value: string | null) => void;
   agentLabel: string;
   selectedAgent: string | null;
