@@ -112,13 +112,14 @@ export function ModelBehaviorSelect({
     (current) => `calc(${current}% + ${0.625 - (1.25 * current) / 100}rem)`,
   );
   const rangeRef = useRef<HTMLInputElement>(null);
+  const isDraggingRef = useRef(false);
   const committedValueRef = useRef(selected?.value ?? null);
   const [visualIndex, setVisualIndex] = useState(selectedIndex);
   const [isDragging, setIsDragging] = useState(false);
   const [open, setOpen] = useState(false);
 
   useLayoutEffect(() => {
-    if (isDragging) return;
+    if (isDraggingRef.current) return;
     position.set(selectedPercent);
     setVisualIndex(selectedIndex);
     committedValueRef.current = selected?.value ?? null;
@@ -264,14 +265,24 @@ export function ModelBehaviorSelect({
               onInput={(event) => updatePosition(event.currentTarget.valueAsNumber)}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
+                isDraggingRef.current = true;
                 setIsDragging(true);
               }}
               onPointerUp={(event) => {
-                event.currentTarget.releasePointerCapture(event.pointerId);
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+                isDraggingRef.current = false;
                 setIsDragging(false);
               }}
-              onPointerCancel={() => setIsDragging(false)}
-              onBlur={() => setIsDragging(false)}
+              onPointerCancel={() => {
+                isDraggingRef.current = false;
+                setIsDragging(false);
+              }}
+              onBlur={() => {
+                isDraggingRef.current = false;
+                setIsDragging(false);
+              }}
             />
           </div>
         </div>
