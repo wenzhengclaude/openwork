@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Settings2, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import type { ModelOption, ModelRef } from "@/app/types";
+import { ModelBrandIcon } from "@/react-app/design-system/model-brand-icon";
 import { ProviderIcon } from "@/react-app/design-system/provider-icon";
 import {
   Popover,
@@ -347,7 +348,8 @@ export function ModelSelect({
                           value={`${OPENWORK_MODELS_PROVIDER_NAME} ${item.title} ${item.id} sign in subscribe`}
                           onClick={handleOpenWorkModels}
                         >
-                          <ProviderIcon
+                          <ModelBrandIcon
+                            modelId={item.id}
                             providerId={OPENWORK_MODELS_PROVIDER_ID}
                             providerName={OPENWORK_MODELS_PROVIDER_NAME}
                             className="size-3.5 text-blue-11"

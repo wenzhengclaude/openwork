@@ -1,15 +1,14 @@
 "use client";
 
+import { Slider } from "@base-ui/react/slider";
+import { ChevronDown, Gauge } from "lucide-react";
+
 import { t } from "@/i18n";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -44,50 +43,75 @@ export function ModelBehaviorSelect({
     option.value ? [{ value: option.value, label: option.label }] : [],
   );
   const rawValue = value ?? null;
-  const selectValue = items.some((option) => option.value === rawValue)
-    ? rawValue
-    : items[0]?.value ?? null;
+  const selectedIndex = Math.max(0, items.findIndex((option) => option.value === rawValue));
+  const selected = items[selectedIndex];
+
+  if (items.length < 2 || !selected) {
+    return null;
+  }
 
   return (
-    <Select
-      value={selectValue}
-      items={items}
-      onValueChange={(nextValue) => {
-        const option = options.find((item) => item.value === nextValue);
-        
-        if (!option) {
-          return;
-        }
-
-        onChange(option.value ?? null);
-      }}
-      disabled={disabled}
-    >
+    <Popover>
       <Tooltip>
         <TooltipTrigger
           render={
-            <SelectTrigger
-              size="sm"
+            <PopoverTrigger
+              type="button"
               disabled={disabled}
               aria-label={t("composer.behavior_label")}
-              className="h-10 border-0 bg-transparent px-2.5 py-1 text-sm rounded-md text-gray-10 shadow-none hover:bg-gray-3 hover:text-gray-12 data-[size=sm]:h-8"
-            />
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-blue-6/60 bg-blue-2/50 px-2.5 text-xs font-medium text-blue-11 transition-colors hover:bg-blue-3 disabled:pointer-events-none disabled:opacity-60"
+            >
+              <Gauge className="size-3.5" />
+              <span className="max-w-24 truncate">{selected.label || label}</span>
+              <ChevronDown className="size-3.5" />
+            </PopoverTrigger>
           }
-        >
-          <SelectValue placeholder={label || t("settings.default_label")} />
-        </TooltipTrigger>
+        />
         <TooltipContent>{t("composer.behavior_label")}</TooltipContent>
       </Tooltip>
-      <SelectContent side="top" sideOffset={8} align="start" className="min-w-48">
-        <SelectGroup>
-          <SelectLabel>Thinking</SelectLabel>
-          {items.map((option) => (
-            <SelectItem key={option.value} value={option.value} className="text-xs">
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
+      <PopoverContent side="top" sideOffset={10} align="start" className="w-80 gap-3 rounded-2xl border border-blue-6/50 bg-dls-surface p-4 shadow-[0_20px_60px_-32px_rgba(20,30,55,0.55)]">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium text-dls-text">
+            {t("model_behavior.title_reasoning_effort")}
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-blue-11">{selected.label}</span>
+        </div>
+        <Slider.Root
+          min={0}
+          max={items.length - 1}
+          step={1}
+          value={selectedIndex}
+          disabled={disabled}
+          onValueChange={(nextIndex) => {
+            const next = items[nextIndex];
+            if (next) onChange(next.value);
+          }}
+          className="relative flex h-8 w-full touch-none select-none items-center"
+        >
+          <Slider.Control className="relative h-2 w-full rounded-full bg-gray-4 outline-none">
+            <Slider.Track className="h-full overflow-hidden rounded-full">
+              <Slider.Indicator className="h-full rounded-full bg-blue-9" />
+            </Slider.Track>
+            {items.map((option, index) => (
+              <span
+                key={option.value}
+                aria-hidden
+                className={`pointer-events-none absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-dls-surface ${index <= selectedIndex ? "bg-blue-9" : "bg-gray-7"}`}
+                style={{ left: `${(index / (items.length - 1)) * 100}%` }}
+              />
+            ))}
+            <Slider.Thumb
+              className="size-5 rounded-full border-2 border-dls-surface bg-blue-9 shadow-[0_4px_12px_rgba(28,95,240,0.42)] outline-none transition-transform data-dragging:scale-110 data-[focus-visible]:ring-2 data-[focus-visible]:ring-blue-7 data-[focus-visible]:ring-offset-2 data-[focus-visible]:ring-offset-dls-surface"
+              getAriaLabel={() => t("model_behavior.title_reasoning_effort")}
+              getAriaValueText={() => selected.label}
+            />
+          </Slider.Control>
+        </Slider.Root>
+        <div className="flex items-center justify-between text-[11px] font-medium text-gray-10">
+          <span>{t("model_behavior.label_fast")}</span>
+          <span>{t("model_behavior.label_maximum")}</span>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
