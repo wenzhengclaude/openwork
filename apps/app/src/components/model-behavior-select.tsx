@@ -126,7 +126,14 @@ export function ModelBehaviorSelect({
             transition={{ duration: 0.2 }}
             className="min-h-7 text-center text-xl font-medium"
           >
-            <span className="bg-gradient-to-r from-indigo-600 via-violet-500 to-purple-500 bg-clip-text text-transparent">
+            <span
+              className="inline-block text-transparent"
+              style={{
+                backgroundImage: "linear-gradient(96deg, #4f46e5 0%, #a855f7 100%)",
+                backgroundClip: "text",
+                WebkitBackgroundClip: "text",
+              }}
+            >
               {description}
             </span>
           </motion.p>
