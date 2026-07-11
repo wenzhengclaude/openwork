@@ -114,15 +114,20 @@ export function ModelBehaviorSelect({
   const rangeRef = useRef<HTMLInputElement>(null);
   const isDraggingRef = useRef(false);
   const committedValueRef = useRef(selected?.value ?? null);
+  const pendingValueRef = useRef<string | null>(null);
   const [visualIndex, setVisualIndex] = useState(selectedIndex);
   const [isDragging, setIsDragging] = useState(false);
   const [open, setOpen] = useState(false);
 
   useLayoutEffect(() => {
-    if (isDraggingRef.current) return;
+    const selectedValue = selected?.value ?? null;
+    if (isDraggingRef.current || (pendingValueRef.current && selectedValue !== pendingValueRef.current)) {
+      return;
+    }
+    pendingValueRef.current = null;
     position.set(selectedPercent);
     setVisualIndex(selectedIndex);
-    committedValueRef.current = selected?.value ?? null;
+    committedValueRef.current = selectedValue;
     if (rangeRef.current) rangeRef.current.value = String(Math.round(selectedPercent));
   }, [isDragging, position, selected?.value, selectedIndex, selectedPercent]);
 
@@ -144,6 +149,7 @@ export function ModelBehaviorSelect({
     if (nextIndex !== visualIndex) setVisualIndex(nextIndex);
     if (next && next.value !== committedValueRef.current) {
       committedValueRef.current = next.value;
+      pendingValueRef.current = next.value;
       onChange(next.value);
     }
   };
