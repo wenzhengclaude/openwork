@@ -124,9 +124,11 @@ export function ModelBehaviorSelect({
             initial={{ opacity: 0, y: 5, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             transition={{ duration: 0.2 }}
-            className="min-h-7 text-center text-xl font-medium text-transparent [background:linear-gradient(96deg,#4f46e5_0%,#a855f7_100%)] [-webkit-background-clip:text]"
+            className="min-h-7 text-center text-xl font-medium"
           >
-            {description}
+            <span className="bg-gradient-to-r from-indigo-600 via-violet-500 to-purple-500 bg-clip-text text-transparent">
+              {description}
+            </span>
           </motion.p>
           <div className="relative mt-5 h-14 touch-none select-none px-3">
             <motion.div
