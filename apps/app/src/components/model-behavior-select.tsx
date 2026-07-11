@@ -117,14 +117,14 @@ export function ModelBehaviorSelect({
         />
         <TooltipContent>{t("composer.behavior_label")}</TooltipContent>
       </Tooltip>
-      <PopoverContent side="top" sideOffset={12} align="start" className="w-[28rem] max-w-[calc(100vw-2rem)] rounded-[22px] border border-gray-5 bg-dls-surface p-0 shadow-[0_22px_46px_-26px_rgba(19,18,41,0.38)]">
-        <div className="px-6 pb-7 pt-5 sm:px-7">
+      <PopoverContent side="top" sideOffset={10} align="start" className="w-[22rem] max-w-[calc(100vw-2rem)] rounded-[20px] border border-gray-5 bg-dls-surface p-0 shadow-[0_20px_40px_-24px_rgba(19,18,41,0.38)]">
+        <div className="px-5 pb-5 pt-4 sm:px-6">
           <motion.p
             key={visualSelected.value}
             initial={{ opacity: 0, y: 5, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             transition={{ duration: 0.2 }}
-            className="min-h-7 text-center text-xl font-medium"
+            className="min-h-6 text-center text-base font-medium"
           >
             <span
               className="inline-block text-transparent"
@@ -137,12 +137,12 @@ export function ModelBehaviorSelect({
               {description}
             </span>
           </motion.p>
-          <div className="relative mt-5 h-14 touch-none select-none px-3">
+          <div className="relative mt-4 h-12 touch-none select-none px-2.5">
             <motion.div
               aria-hidden
               animate={{ backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"] }}
               transition={{ duration: 7, ease: "linear", repeat: Infinity }}
-              className="absolute inset-x-3 top-1/2 h-12 -translate-y-1/2 overflow-hidden rounded-full bg-[length:180%_100%] [background-image:linear-gradient(102deg,#2f51d5_0%,#6444e7_46%,#a34ff7_100%)]"
+              className="absolute inset-x-2.5 top-1/2 h-10 -translate-y-1/2 overflow-hidden rounded-full bg-[length:180%_100%] [background-image:linear-gradient(102deg,#2f51d5_0%,#6444e7_46%,#a34ff7_100%)]"
             >
               <span className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.03),rgba(255,255,255,0.2),rgba(255,255,255,0.03))]" />
               {energyParticles.map((particle) => (
@@ -172,9 +172,9 @@ export function ModelBehaviorSelect({
             </motion.div>
             <motion.span
               aria-hidden
-              animate={{ left: `calc(0.75rem + (100% - 1.5rem) * ${position / 100})`, scale: isDragging ? 1.06 : 1 }}
+              animate={{ left: `calc(0.625rem + (100% - 1.25rem) * ${position / 100})`, scale: isDragging ? 1.06 : 1 }}
               transition={motionTransition}
-              className="pointer-events-none absolute top-1/2 z-10 size-14 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gray-3 bg-dls-surface shadow-[0_5px_12px_rgba(51,37,115,0.2)]"
+              className="pointer-events-none absolute top-1/2 z-10 size-12 -translate-x-1/2 -translate-y-1/2 rounded-full border border-gray-3 bg-dls-surface shadow-[0_4px_10px_rgba(51,37,115,0.2)]"
             >
               <motion.span
                 animate={{ opacity: isDragging ? 0.18 : 0, scale: isDragging ? 1 : 0.7 }}
@@ -191,7 +191,7 @@ export function ModelBehaviorSelect({
               disabled={disabled}
               aria-label={t("model_behavior.title_reasoning_effort")}
               aria-valuetext={visualSelected.label}
-              className="absolute inset-x-3 inset-y-0 z-20 h-full w-[calc(100%-1.5rem)] cursor-pointer opacity-0 disabled:cursor-not-allowed"
+              className="absolute inset-x-2.5 inset-y-0 z-20 h-full w-[calc(100%-1.25rem)] cursor-pointer opacity-0 disabled:cursor-not-allowed"
               onChange={(event) => updatePosition(event.currentTarget.valueAsNumber)}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
@@ -205,13 +205,13 @@ export function ModelBehaviorSelect({
               onBlur={() => setIsDragging(false)}
             />
           </div>
-          <div className="mt-3 flex justify-center">
+          <div className="mt-2 flex justify-center">
             <motion.span
               key={visualSelected.value}
               initial={{ opacity: 0, y: 3 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.16 }}
-              className="rounded-full bg-gray-3 px-4 py-1 text-sm font-medium text-violet-11"
+              className="rounded-full bg-gray-3 px-3 py-0.5 text-xs font-medium text-violet-11"
             >
               {visualSelected.label}
             </motion.span>
