@@ -179,7 +179,7 @@ export const AUTH_TOKEN_STORAGE_KEY = "openwork:web:auth-token";
 export const ONBOARDING_INTENT_STORAGE_KEY = "openwork:web:onboarding-intent";
 export const PENDING_AUTH_INTENT_STORAGE_KEY = "openwork:web:pending-auth-intent";
 export const WORKER_STATUS_POLL_MS = DEN_WORKER_POLL_INTERVAL_MS;
-export const DEFAULT_AUTH_NAME = "OpenWork User";
+export const DEFAULT_AUTH_NAME = "Open One User";
 export const DEFAULT_WORKER_NAME = "My Worker";
 
 export type AuthIntent = "models";

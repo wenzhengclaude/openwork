@@ -24,7 +24,7 @@ import {
   shouldShowOpenWorkModelsPromo,
 } from "../../cloud/openwork-models-promo";
 
-const DOCS_URL = "https://openworklabs.com/docs";
+const DOCS_URL = "http://10.10.16.164:13006/#getting-started";
 const STATUS_BAR_BOOT_STARTED_AT = Date.now();
 const STATUS_BAR_INITIALIZING_MS = 15_000;
 

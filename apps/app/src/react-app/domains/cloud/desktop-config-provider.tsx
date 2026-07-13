@@ -178,7 +178,7 @@ export function DesktopConfigProvider({ children }: DesktopConfigProviderProps) 
     const brandAppNamePromise = brandAppNameAction
       ? (() => {
           const appName = typeof brandAppNameAction.nextValue === "string" ? brandAppNameAction.nextValue : null;
-          document.title = appName ?? "OpenWork";
+          document.title = appName ?? "Open One";
           return applyBrandAppName(appName).then(() => undefined).catch(() => undefined);
         })()
       : Promise.resolve();

@@ -37,7 +37,7 @@ export type ShellConfig = {
 /* ------------------------------------------------------------------ */
 
 export const DEFAULT_SHELL_CONFIG: ShellConfig = {
-  appName: "OpenWork",
+  appName: "Open One",
   statusBar: true,
   sidebar: true,
   docsButton: true,
@@ -63,7 +63,14 @@ function readShellConfig(): ShellConfig {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SHELL_CONFIG;
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SHELL_CONFIG, ...parsed };
+    const config = { ...DEFAULT_SHELL_CONFIG, ...parsed };
+    // Preserve a real custom name, but migrate the previous stock label.
+    if (config.appName === "OpenWork") {
+      const migrated = { ...config, appName: DEFAULT_SHELL_CONFIG.appName };
+      writeShellConfig(migrated);
+      return migrated;
+    }
+    return config;
   } catch {
     return DEFAULT_SHELL_CONFIG;
   }

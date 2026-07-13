@@ -122,8 +122,8 @@ export function AuthScreen() {
 
             <div className="relative z-10 flex h-full flex-col">
               <div className="flex items-center gap-3">
-                <img src="/openwork-logo-transparent.svg" alt="OpenWork" className="h-9 w-auto" />
-                <span className="text-[13px] font-medium text-white/80">OpenWork Cloud</span>
+                <img src="/open-one-mark.svg" alt="Open One" className="h-9 w-9" />
+                <span className="text-[13px] font-medium text-white/80">Open One Control</span>
               </div>
 
               {/* Spacers split the space below the logo ~1:2, so the headline
@@ -168,9 +168,9 @@ export function AuthScreen() {
           <div className="flex flex-col justify-center border-[var(--dls-border)] px-5 py-6 sm:px-7 sm:py-8 md:px-9 md:py-10 lg:border-l">
             {/* Mobile-only brand header — desktop shows the logo in the gradient panel */}
             <div className="mb-6 flex items-center gap-2 lg:hidden">
-              <img src="/openwork-mark.svg" alt="OpenWork" className="h-7 w-auto" />
+              <img src="/open-one-mark.svg" alt="Open One" className="h-7 w-7" />
               <span className="text-[1.15rem] font-semibold tracking-tight text-[var(--dls-text-primary)]">
-                OpenWork
+                Open One
               </span>
             </div>
             {!sessionHydrated ? (

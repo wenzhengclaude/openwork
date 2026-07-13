@@ -45,17 +45,17 @@ export const CLOUD_MCP_SYNC_MARKER_STORAGE_KEY = "openwork.den.mcp.sync";
 const ORG_PROXY_HEADER = "x-openwork-legacy-org-id";
 const DEFAULT_DEN_TIMEOUT_MS = 12_000;
 
-export const DEFAULT_DEN_AUTH_NAME = "OpenWork User";
+export const DEFAULT_DEN_AUTH_NAME = "Open One User";
 const BUILD_DEN_BASE_URL =
-  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_BASE_URL === "string"
-    ? import.meta.env.VITE_DEN_BASE_URL
-    : "").trim() || "https://app.openworklabs.com";
+  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_OPEN_ONE_DEN_BASE_URL === "string"
+    ? import.meta.env.VITE_OPEN_ONE_DEN_BASE_URL
+    : "").trim() || "http://10.10.16.164:13005";
 const BUILD_DEN_REQUIRE_SIGNIN =
   (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_REQUIRE_SIGNIN === "string"
     ? /^(1|true|yes|on)$/i.test(import.meta.env.VITE_DEN_REQUIRE_SIGNIN.trim())
     : false);
 
-const HOSTED_DEFAULT_DEN_BASE_URL = "https://app.openworklabs.com";
+const HOSTED_DEFAULT_DEN_BASE_URL = "http://10.10.16.164:13005";
 export const DEFAULT_DEN_BASE_URL = BUILD_DEN_BASE_URL;
 export const DEN_INFERENCE_PATH = "/dashboard/inference";
 

@@ -2,7 +2,7 @@ const ENV_FEEDBACK_URL = String(import.meta.env.VITE_OPENWORK_FEEDBACK_URL ?? ""
 const ENV_APP_VERSION = String(import.meta.env.VITE_OPENWORK_APP_VERSION ?? "").trim();
 
 export const DEFAULT_FEEDBACK_URL =
-  ENV_FEEDBACK_URL || "https://openworklabs.com/feedback";
+  ENV_FEEDBACK_URL || "http://10.10.16.164:13006";
 
 type FeedbackUrlOptions = {
   entrypoint: string;

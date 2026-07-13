@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getErrorMessage, requestJson } from "../_lib/den-flow";
 import { isMobileUserAgent } from "../_lib/platform";
 
-const OPENWORK_DOWNLOAD_URL = "https://openworklabs.com/download";
+const OPENWORK_DOWNLOAD_URL = "http://10.10.16.164:13006";
 
 const capabilities = [
   {

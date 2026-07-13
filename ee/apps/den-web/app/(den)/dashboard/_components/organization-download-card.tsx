@@ -36,7 +36,7 @@ export function OrganizationDownloadCard({
         <div>
           <div className="flex items-center gap-2.5">
             <Download className="h-5 w-5 text-[#07192C]/70" aria-hidden="true" />
-            <h2 className="text-[16px] font-semibold text-[#07192C]">Download OpenWork for {organizationName}</h2>
+            <h2 className="text-[16px] font-semibold text-[#07192C]">Download Open One for {organizationName}</h2>
           </div>
           <p className="mt-2 max-w-[620px] text-[13px] leading-[1.6] text-[#5A6886]">
             Your workspace and required sign-in are built into the installer.

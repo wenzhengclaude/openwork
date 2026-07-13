@@ -163,13 +163,13 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
       try {
         return `${getDenMcpUrl()}/agent`;
       } catch {
-        return "https://app.openworklabs.com/api/den/mcp/agent";
+        return "http://10.10.16.164:13005/api/den/mcp/agent";
       }
     },
     type: "remote",
     oauth: true,
     kind: "mcp",
-    iconSrc: "/openwork-mark.svg",
+    iconSrc: "/open-one-mark.svg",
     // Auto-managed by the signed-in cloud reconciler (syncCloudControlMcp):
     // configured + enabled while signed in to OpenWork Cloud. Hidden from the
     // default catalog; "Show hidden" reveals it.
@@ -184,7 +184,7 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
     command: ["npx", "-y", "openwork-ui-mcp"],
     oauth: false,
     kind: "ui-control",
-    iconSrc: "/openwork-mark.svg",
+    iconSrc: "/open-one-mark.svg",
     // Internal UI-control surface for agents driving the desktop app. Hidden
     // from the default catalog; "Show hidden" reveals it.
     defaultHidden: true,

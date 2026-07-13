@@ -2,9 +2,9 @@
   "name": "@openwork/desktop",
   "private": true,
   "version": "0.17.20",
-  "description": "OpenWork desktop shell",
+  "description": "Open One desktop shell",
   "author": {
-    "name": "OpenWork",
+    "name": "Open One",
     "email": "support@openworklabs.com"
   },
   "main": "electron/main.mjs",

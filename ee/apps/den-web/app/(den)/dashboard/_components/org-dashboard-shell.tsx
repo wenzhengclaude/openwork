@@ -85,6 +85,10 @@ function OrgMark({ name }: { name: string }) {
   );
 }
 
+function OpenOneMark({ className = "h-9 w-9" }: { className?: string }) {
+  return <img src="/open-one-mark.svg" alt="Open One" className={className} />;
+}
+
 function OpenWorkMark({ className = "h-9 w-auto" }: { className?: string }) {
   return (
     <svg
@@ -146,7 +150,7 @@ export function SidebarBrandMark({
   if (!iconUrl || failedUrl === iconUrl) {
     return (
       <div data-sidebar-brand-icon="fallback">
-        <OpenWorkMark />
+        <OpenOneMark />
       </div>
     );
   }
@@ -202,7 +206,7 @@ function getDashboardPageTitle(pathname: string, orgSlug: string | null) {
     return "Desktop Policies";
   }
   if (pathname.startsWith(getInferenceRoute(orgSlug))) {
-    return "OpenWork Models";
+    return "Managed Models";
   }
   if (pathname.startsWith(getPluginsRoute(orgSlug))) {
     return "Plugins";
@@ -314,7 +318,7 @@ export function OrgDashboardShell({ children }: { children: React.ReactNode }) {
         label: "Models",
         icon: Sparkles,
         children: [
-          { href: getInferenceRoute(activeOrg.slug), label: "OpenWork Models" },
+          { href: getInferenceRoute(activeOrg.slug), label: "Managed Models" },
           { href: getCustomLlmProvidersRoute(activeOrg.slug), label: "LLM Providers" },
         ],
       }
@@ -400,7 +404,7 @@ export function OrgDashboardShell({ children }: { children: React.ReactNode }) {
         onClick={() => setSwitcherOpen((current) => !current)}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <OrgMark name={activeOrg?.name ?? "OpenWork"} />
+          <OrgMark name={activeOrg?.name ?? "Open One"} />
           <div className="min-w-0">
             <p className="truncate text-[14px] font-medium text-gray-900">
               {activeOrg?.name ?? "Loading..."}
@@ -422,7 +426,7 @@ export function OrgDashboardShell({ children }: { children: React.ReactNode }) {
         <div className="absolute bottom-[calc(100%+0.5rem)] left-0 w-[240px] z-30 grid gap-1 rounded-2xl border border-gray-200 bg-white py-2 shadow-[0_12px_24px_-12px_rgba(0,0,0,0.15)]">
           <div className="px-3 py-1.5">
             <p className="truncate text-[13px] font-medium text-gray-900">
-              {user?.email ?? "OpenWork user"}
+              {user?.email ?? "Open One user"}
             </p>
           </div>
           

@@ -54,14 +54,15 @@ const DESKTOP_PROTOCOL_SCHEME = "openwork";
 const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
 const APP_NAME =
   process.env.OPENWORK_ELECTRON_APP_NAME?.trim() ||
-  (isDevMode ? "OpenWork - Dev" : "OpenWork");
+  (isDevMode ? "Open One - Dev" : "Open One");
 let currentDisplayAppName = APP_NAME;
 const APP_IDENTIFIER =
   process.env.OPENWORK_ELECTRON_APP_IDENTIFIER?.trim() ||
   (isDevMode ? DEV_APP_IDENTIFIER : TAURI_APP_IDENTIFIER);
-const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/different-ai/openwork/releases/latest/download";
-const RELEASE_PAGE_URL = "https://github.com/different-ai/openwork/releases/latest";
-const DOCS_PAGE_URL = "https://openworklabs.com/docs";
+const RELEASE_PORTAL_URL = process.env.OPEN_ONE_RELEASE_PORTAL_URL?.trim() || "http://10.10.16.164:13006";
+const RELEASE_DOWNLOAD_BASE_URL = `${RELEASE_PORTAL_URL}/releases`;
+const RELEASE_PAGE_URL = RELEASE_PORTAL_URL;
+const DOCS_PAGE_URL = `${RELEASE_PORTAL_URL}/#getting-started`;
 const applicationMenu = createApplicationMenu({
   appName: APP_NAME,
   docsUrl: DOCS_PAGE_URL,
@@ -246,6 +247,9 @@ function selectDownloadFile(files, arch) {
 }
 
 async function resolveCorrectArchitectureDownloadUrl(arch) {
+  const configuredDownloadUrl = process.env.OPEN_ONE_RELEASE_DOWNLOAD_URL?.trim();
+  if (configuredDownloadUrl) return configuredDownloadUrl;
+  if (process.platform === "win32") return `${RELEASE_PORTAL_URL}/Open-One-Setup.exe`;
   const manifestUrl = `${RELEASE_DOWNLOAD_BASE_URL}/${updaterManifestName(arch)}`;
   try {
     const response = await fetch(manifestUrl, {
@@ -256,7 +260,7 @@ async function resolveCorrectArchitectureDownloadUrl(arch) {
     if (!selected?.url) return null;
     return /^https?:\/\//i.test(selected.url)
       ? selected.url
-      : new URL(selected.url, `${RELEASE_DOWNLOAD_BASE_URL}/`).toString();
+      : new URL(selected.url, `${RELEASE_PORTAL_URL}/`).toString();
   } catch (error) {
     console.warn("[architecture] failed to resolve latest download URL", error);
     return null;
@@ -268,7 +272,7 @@ async function resolveArchitectureInfo() {
   const systemArch = resolveSystemArch();
   const version = app.getVersion();
   const targetArch = systemArch === "arm64" || systemArch === "x64" ? systemArch : appArch;
-  const assetName = `openwork-${platformDownloadSlug()}-${downloadAssetArch(targetArch)}-${version}.${downloadAssetExtension()}`;
+  const assetName = `Open-One-Setup-${version}.${downloadAssetExtension()}`;
   const latestDownloadUrl = await resolveCorrectArchitectureDownloadUrl(targetArch);
   const hasCorrectArchitectureDownload = Boolean(latestDownloadUrl);
   return {
@@ -279,7 +283,7 @@ async function resolveArchitectureInfo() {
     mismatch: appArch !== systemArch && hasCorrectArchitectureDownload,
     platform: process.platform === "win32" ? "windows" : process.platform,
     version,
-    downloadUrl: latestDownloadUrl || `${RELEASE_DOWNLOAD_BASE_URL}/${assetName}`,
+    downloadUrl: latestDownloadUrl || `${RELEASE_PORTAL_URL}/${assetName}`,
     releaseUrl: RELEASE_PAGE_URL,
   };
 }
@@ -823,7 +827,8 @@ if (extraLaunchArgs) {
   }
 }
 configureFakeMediaForTests(app, envFlagEnabled("OPENWORK_ELECTRON_FAKE_MEDIA"));
-const DEFAULT_DEN_BASE_URL = "https://app.openworklabs.com";
+const DEFAULT_DEN_BASE_URL =
+  process.env.OPEN_ONE_DEN_BASE_URL?.trim() || "http://10.10.16.164:13005";
 const DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:4096";
 const FORCE_DESKTOP_REQUIRE_SIGNIN = envFlagEnabled("OPENWORK_FORCE_SIGNIN");
 const DEFAULT_DESKTOP_REQUIRE_SIGNIN = FORCE_DESKTOP_REQUIRE_SIGNIN;
@@ -1040,7 +1045,7 @@ function showShutdownScreen() {
   <body>
     <main>
       <div class="spinner" aria-hidden="true"></div>
-      <div class="title">Stopping OpenWork services</div>
+      <div class="title">Stopping Open One services</div>
       <div class="body">Closing local workers and background services...</div>
     </main>
   </body>
@@ -1063,13 +1068,13 @@ async function disposeRuntimeBeforeQuit() {
 
 function assertOpenworkServerReady(info) {
   if (!info?.running) {
-    throw new Error("OpenWork server did not stay running after startup.");
+    throw new Error("Open One server did not stay running after startup.");
   }
   if (!info.baseUrl) {
-    throw new Error("OpenWork server did not report a base URL after startup.");
+    throw new Error("Open One server did not report a base URL after startup.");
   }
   if (!info.ownerToken && !info.clientToken) {
-    throw new Error("OpenWork server did not report an access token after startup.");
+    throw new Error("Open One server did not report an access token after startup.");
   }
   return info;
 }

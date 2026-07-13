@@ -26,7 +26,7 @@ export function OrganizationScreen() {
     const trimmedName = user?.name?.trim();
     if (trimmedName) return trimmedName;
     const emailLocalPart = user?.email?.split("@")[0]?.trim() ?? "";
-    return emailLocalPart || "OpenWork User";
+    return emailLocalPart || "Open One User";
   }, [user?.email, user?.name]);
 
   const userInitials = useMemo(() => {
@@ -36,7 +36,7 @@ export function OrganizationScreen() {
 
   const activeOrg = useMemo(() => orgs.find((org) => org.isActive) ?? null, [orgs]);
   const isSingleOrgMode = runtimeConfigLoaded && runtimeConfig.orgMode === "single_org";
-  const singleOrgName = runtimeConfig.singleOrgName || "OpenWork";
+  const singleOrgName = runtimeConfig.singleOrgName || "Open One";
   const singleOrgSlug = runtimeConfig.singleOrgSlug.trim();
   const showDirectCreateFlow = !isSingleOrgMode && orgs.length === 0;
   const {

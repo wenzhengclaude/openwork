@@ -2,9 +2,9 @@
 # the same macOS bundle identifier, keychain entries, Launchpad slot, and TCC
 # permissions. In-place migration from Tauri to Electron depends on this.
 appId: com.differentai.openwork
-productName: OpenWork
+productName: Open One
 protocols:
-  - name: OpenWork
+  - name: Open One
     schemes:
       - openwork
 directories:
@@ -112,4 +112,4 @@ win:
     - nsis
 nsis:
   include: build/installer.nsh
-artifactName: openwork-${os}-${arch}-${version}.${ext}
+artifactName: Open-One-Setup-${version}.${ext}

@@ -1,5 +1,4 @@
 /** @jsxImportSource react */
-import { MarbleAvatar } from "./marble-avatar";
 
 export type WorkspaceIconProps = {
   workspaceId: string;
@@ -7,8 +6,13 @@ export type WorkspaceIconProps = {
   sizeClass?: string;
 };
 
-export function WorkspaceIcon({ workspaceId, sizeClass = "size-4" }: WorkspaceIconProps) {
+export function WorkspaceIcon({ workspaceId: _workspaceId, sizeClass = "size-4" }: WorkspaceIconProps) {
   return (
-    <MarbleAvatar seed={workspaceId} className={`${sizeClass} shrink-0 rounded-full`} />
+    <img
+      src="/open-one-mark.svg"
+      alt=""
+      aria-hidden="true"
+      className={`${sizeClass} shrink-0`}
+    />
   );
 }

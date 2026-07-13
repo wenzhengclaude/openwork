@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "OpenWork Cloud";
+export const alt = "Open One Control";
 export const size = {
   width: 1200,
   height: 630
@@ -70,13 +70,13 @@ export default function OpenGraphImage() {
                   fontWeight: 700
                 }}
               >
-                OW
+                O1
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, textTransform: "uppercase", letterSpacing: 3, color: "#64748b" }}>
-                  OpenWork Cloud
+                  Open One Control
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>OpenWork Cloud</div>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>Open One Control</div>
               </div>
             </div>
 
@@ -86,15 +86,15 @@ export default function OpenGraphImage() {
             </div>
 
             <div style={{ fontSize: 24, lineHeight: 1.45, color: "#475569", display: "flex", maxWidth: 520 }}>
-              Share setups across your org, keep selected workflows available, and manage OpenWork Cloud from app.openworklabs.com.
+              Configure shared tools, give teams a clear control surface, and keep work moving from one place.
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {[
-                "Open source",
-                "50+ integrations and LLMs",
-                "Free first worker",
-                "Organization billing for scale"
+                "Team controls",
+                "Models and MCP",
+                "Private deployment",
+                "Organization ready"
               ].map((label) => (
                 <div
                   key={label}

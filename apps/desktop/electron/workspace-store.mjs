@@ -563,7 +563,7 @@ export function createWorkspaceStore({ app, defaultDenBaseUrl, defaultRequireSig
     return path.join(os.homedir(), "OpenWork");
   }
 
-  // True first run: create the default "OpenWork" workspace under the user's
+  // True first run: create the default "Open One" workspace under the user's
   // home directory so the renderer lands directly in a ready workspace — no
   // folder picker, no empty state. Cross-platform (os.homedir + path.join).
   async function createDefaultFirstRunWorkspace() {
@@ -572,8 +572,8 @@ export function createWorkspaceStore({ app, defaultDenBaseUrl, defaultRequireSig
     await writeWorkspaceOpenworkConfig(folderPath, defaultWorkspaceOpenworkConfig(folderPath, "starter"));
     return normalizeWorkspaceEntry({
       id: localWorkspaceId(folderPath),
-      name: "OpenWork",
-      displayName: "OpenWork",
+      name: "Open One",
+      displayName: "Open One",
       path: folderPath,
       preset: "starter",
       workspaceType: "local",
@@ -794,6 +794,14 @@ export function createWorkspaceStore({ app, defaultDenBaseUrl, defaultRequireSig
     const idMap = new Map();
     const migratedWorkspaces = workspaces.map((entry) => {
       const workspace = entry && typeof entry === "object" ? entry : normalizeWorkspaceEntry(entry ?? {});
+      if (workspace.name === "OpenWork" || workspace.displayName === "OpenWork") {
+        changed = true;
+        return {
+          ...workspace,
+          name: workspace.name === "OpenWork" ? "Open One" : workspace.name,
+          displayName: workspace.displayName === "OpenWork" ? "Open One" : workspace.displayName,
+        };
+      }
       if (workspace.workspaceType !== "remote" || workspace.remoteType !== "openwork") return workspace;
 
       const remoteWorkspaceId = String(workspace.openworkWorkspaceId ?? "").trim()

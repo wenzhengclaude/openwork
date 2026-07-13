@@ -731,7 +731,7 @@ export function AppSidebar(props: AppSidebarProps) {
 
   const brandLogoUrl = useBrandLogoUrl();
   const brandAppName = useBrandAppName();
-  const hasManagedBrand = brandLogoUrl || brandAppName !== "OpenWork";
+  const hasManagedBrand = brandLogoUrl || brandAppName !== "Open One";
 
   return (
     <SidebarContext.Provider value={contextValue}>
