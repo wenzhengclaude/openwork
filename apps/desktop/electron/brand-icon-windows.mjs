@@ -70,14 +70,33 @@ export function windowsBrandShortcutFileName(appName) {
   const safeName = String(appName ?? "OpenWork")
     .replace(/[<>:"/\\|?*]/g, "-")
     .trim() || "OpenWork";
-  return `${safeName} Organization.lnk`;
+  return `${safeName}.lnk`;
+}
+
+export function windowsInstalledShortcutFileName(appName) {
+  const safeName = String(appName ?? "OpenWork")
+    .replace(/[<>:"/\\|?*]/g, "-")
+    .trim() || "OpenWork";
+  return `${safeName}.lnk`;
+}
+
+export function windowsInstalledExecutablePath({ packaged, execPath, resourcesPath, shortcutPath }) {
+  if (!packaged) return execPath;
+  return [
+    shortcutPath.split(/[\\/]AppData[\\/]/i)[0],
+    "AppData",
+    "Local",
+    "Programs",
+    resourcesPath.replace(/[\\/]resources$/i, "").split(/[\\/]/).pop(),
+    execPath.split(/[\\/]/).pop(),
+  ].join("\\");
 }
 
 export function windowsBrandShortcutDetails({ target, appId, appIconPath, appName }) {
   return {
     target,
     cwd: target.replace(/[\\/][^\\/]+$/, ""),
-    description: `${appName} organization desktop`,
+    description: `${appName} desktop`,
     icon: appIconPath,
     iconIndex: 0,
     appUserModelId: appId,

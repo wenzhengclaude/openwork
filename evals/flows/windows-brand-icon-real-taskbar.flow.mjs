@@ -78,7 +78,7 @@ async function windowsExec(ctx, label, command) {
 
 async function assertWindowsBrandShortcut(ctx, expected) {
   const result = await windowsExec(ctx, "check organization shortcut", `
-$path = 'C:\\Users\\Administrator\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\OpenWork Organization.lnk'
+$path = 'C:\\Users\\Administrator\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\OpenWork.lnk'
 if (Test-Path -LiteralPath $path) { Write-Output 'present' } else { Write-Output 'absent' }
 `);
   const actual = result.stdout.match(/(?:^|\r?\n)(present|absent)(?:\r?\n|$)/)?.[1] ?? result.stdout.trim();
@@ -341,7 +341,7 @@ export default {
               `Expected restored stock icon, got ${JSON.stringify(state)}`,
             );
             ctx.recordEvidence({ type: "assertion", status: "passed", assertion: "Windows taskbar identity returned to the executable's stock icon", actual: JSON.stringify(state) });
-            await assertWindowsBrandShortcut(ctx, "absent");
+            await assertWindowsBrandShortcut(ctx, "present");
             await assertOpenWorkWindow(ctx);
           },
           screenshot: computerUseScreenshot("stock-icon-restored", { requireText: ["Search sessions"] }),

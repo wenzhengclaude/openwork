@@ -20,7 +20,7 @@ const vo = await loadVoiceoverParagraphs("organization-display-branding");
 const execFileAsync = promisify(execFile);
 const APP_NAME = "Acme Work";
 const ORG_NAME = "Example Corp";
-const ORG_SETTINGS_PATH = "/dashboard/org-settings";
+const ORG_SETTINGS_PATH = "/dashboard/brand-appearance";
 const ASSET_PORT = 8091;
 const state = {
   logoUrl: null,
@@ -234,7 +234,7 @@ export default {
             })()`);
             ctx.recordEvidence({ type: "assertion", status: "passed", assertion: "Den desktop config returns the owner-saved app name and private wordmark URL", actual: JSON.stringify({ brandAppName: config.brandAppName, brandLogoUrl: config.brandLogoUrl }) });
           },
-          screenshot: { name: "frame-1-owner-saves-acme-work", sandboxCapture: true, textTargetUrlIncludes: ORG_SETTINGS_PATH, requireText: ["Brand Appearance", "Application name"] },
+          screenshot: { name: "frame-1-owner-saves-acme-work", sandboxCapture: true, textTargetUrlIncludes: ORG_SETTINGS_PATH, requireText: ["Brand appearance", "Application name"] },
         });
       },
     },
@@ -273,7 +273,7 @@ export default {
             const text = await panelEval(ctx, "document.body.innerText");
             ctx.assert(text.includes(`${APP_NAME} Installer`), `Installer title missing from ${text.slice(0, 500)}`);
             ctx.assert(text.includes(`This sets up ${APP_NAME} for ${ORG_NAME}`), `Installer organization copy missing from ${text.slice(0, 500)}`);
-            ctx.assert(text.includes("Configured via install link"), "Installer did not report install-link configuration.");
+            ctx.assert(text.includes("Configured via organization setup file"), "Installer did not report its adjacent organization setup file.");
           },
           screenshot: { name: "frame-3-acme-work-installer", sandboxCapture: true, textTargetUrlIncludes: "127.0.0.1", requireText: [`${APP_NAME} Installer`, `This sets up ${APP_NAME} for ${ORG_NAME}`] },
         });

@@ -9,6 +9,8 @@ import {
   windowsBrandAppUserModelId,
   windowsBrandShortcutDetails,
   windowsBrandShortcutFileName,
+  windowsInstalledShortcutFileName,
+  windowsInstalledExecutablePath,
   writeWindowsBrandShortcut,
   windowsIconFromNativeImage,
 } from "./brand-icon-windows.mjs";
@@ -157,7 +159,8 @@ test("restores a visible taskbar button when refresh staging fails", async () =>
 });
 
 test("builds a per-user Start Menu shortcut with the branded Windows identity", () => {
-  assert.equal(windowsBrandShortcutFileName('Agent: Blue/West'), "Agent- Blue-West Organization.lnk");
+  assert.equal(windowsBrandShortcutFileName('Agent: Blue/West'), "Agent- Blue-West.lnk");
+  assert.equal(windowsInstalledShortcutFileName("OpenWork"), "OpenWork.lnk");
   assert.deepEqual(windowsBrandShortcutDetails({
     target: "C:\\Program Files\\OpenWork\\OpenWork.exe",
     appId: "com.differentai.openwork.brand.1234",
@@ -166,14 +169,23 @@ test("builds a per-user Start Menu shortcut with the branded Windows identity", 
   }), {
     target: "C:\\Program Files\\OpenWork\\OpenWork.exe",
     cwd: "C:\\Program Files\\OpenWork",
-    description: "OpenWork organization desktop",
+    description: "OpenWork desktop",
     icon: "C:\\Users\\Admin\\brand-icon.ico",
     iconIndex: 0,
     appUserModelId: "com.differentai.openwork.brand.1234",
   });
 });
 
-test("creates a first-time branded shortcut and replaces it on repeat applies", () => {
+test("anchors a packaged shortcut target to the active Windows user profile", () => {
+  assert.equal(windowsInstalledExecutablePath({
+    packaged: true,
+    execPath: "C:\\Windows\\System32\\config\\systemprofile\\AppData\\Local\\Programs\\@openworkdesktop\\OpenWork.exe",
+    resourcesPath: "C:\\Windows\\System32\\config\\systemprofile\\AppData\\Local\\Programs\\@openworkdesktop\\resources",
+    shortcutPath: "C:\\Users\\Administrator\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Blue Yonder.lnk",
+  }), "C:\\Users\\Administrator\\AppData\\Local\\Programs\\@openworkdesktop\\OpenWork.exe");
+});
+
+test("creates a branded shortcut after callers remove stale Windows metadata", () => {
   const calls = [];
   const details = { appUserModelId: "com.differentai.openwork.brand.1234" };
   const shellApi = {
@@ -185,12 +197,6 @@ test("creates a first-time branded shortcut and replaces it on repeat applies", 
   const shortcutPath = "C:\\Users\\Admin\\OpenWork Organization.lnk";
 
   const created = writeWindowsBrandShortcut(shellApi, shortcutPath, details, false);
-  const replaced = writeWindowsBrandShortcut(shellApi, shortcutPath, details, true);
-
   assert.equal(created, true);
-  assert.equal(replaced, true);
-  assert.deepEqual(calls, [
-    [shortcutPath, "create", details],
-    [shortcutPath, "replace", details],
-  ]);
+  assert.deepEqual(calls, [[shortcutPath, "create", details]]);
 });

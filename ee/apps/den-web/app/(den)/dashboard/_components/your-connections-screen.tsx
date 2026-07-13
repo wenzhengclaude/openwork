@@ -7,6 +7,8 @@ import { DashboardPageTemplate } from "../../_components/ui/dashboard-page-templ
 import { getOrgAccessFlags } from "../../_lib/den-org";
 import { useOrgDashboard } from "../_providers/org-dashboard-provider";
 import { IntegrationIcon } from "./integration-icon";
+import { safeMcpAuthorizationUrl } from "./mcp-authorization-url";
+import { MICROSOFT_365_DISPLAY_SCOPES } from "./microsoft-365-permissions";
 import {
   canDisconnectNativeProviderAccount,
   type ExternalMcpConnection,
@@ -69,14 +71,20 @@ export function YourConnectionsScreen() {
 
   async function handleConnectMyAccount(connectionId: string) {
     setRowError(null);
-    const result = await startOAuth.mutateAsync(connectionId);
-    if (result.status === "connected") {
-      void refetch();
-      return;
-    }
-    if (result.authorizeUrl) {
-      window.open(result.authorizeUrl, "_blank", "noopener,noreferrer");
+    try {
+      const result = await startOAuth.mutateAsync(connectionId);
+      if (result.status === "connected") {
+        void refetch();
+        return;
+      }
+      if (!result.authorizeUrl) throw new Error("The MCP provider did not return an authorization URL.");
+      window.open(safeMcpAuthorizationUrl(result.authorizeUrl), "_blank", "noopener,noreferrer");
       pollUntilConnectedForMe(connectionId);
+    } catch (connectError) {
+      setRowError({
+        connectionId,
+        message: connectError instanceof Error ? connectError.message : "Failed to connect account.",
+      });
     }
   }
 
@@ -161,7 +169,7 @@ function YourConnectionRow({
   const needsAdminConnect = isAdmin && !isPerMember && connection.authType === "oauth" && !connection.connectedForMe;
   const canDisconnect = canDisconnectNativeProviderAccount(connection);
   const microsoftScopes = connection.id === "microsoft-365"
-    ? (connection.grantedScopes ?? []).filter((scope) => ["Mail.Read", "Calendars.Read", "Files.Read"].includes(scope))
+    ? (connection.grantedScopes ?? []).filter((scope) => MICROSOFT_365_DISPLAY_SCOPES.has(scope))
     : [];
 
   return (
