@@ -224,7 +224,7 @@ if (!viteReady) {
 }
 
 if (!viteReady) {
-  uiChild = run(pnpmCmd, ["-w", "dev:ui"], {
+  uiChild = run(pnpmCmd, ["--filter", "@openwork/app", "exec", "vite"], {
     cwd: repoRoot,
     env: {
       ...process.env,
