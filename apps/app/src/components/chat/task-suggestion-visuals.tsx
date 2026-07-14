@@ -76,4 +76,4 @@ export function TaskSuggestionVisual({ kind, className }: { kind: TaskSuggestion
 }
 
 export const taskSuggestionButtonClass =
-  "rounded-2xl border-border/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(248,250,252,0.76))] p-4 shadow-[0_22px_70px_-48px_rgba(15,23,42,0.76)] transition-[background,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-background hover:shadow-[0_24px_72px_-42px_rgba(15,23,42,0.82)]";
+  "rounded-2xl border-border/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),rgba(248,250,252,0.76))] p-4 shadow-[0_22px_70px_-48px_rgba(15,23,42,0.76)] transition-[background,border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-background hover:shadow-[0_24px_72px_-42px_rgba(15,23,42,0.82)] dark:border-white/10 dark:bg-[linear-gradient(145deg,rgba(28,31,36,0.96),rgba(14,16,20,0.92))] dark:shadow-[0_24px_70px_-46px_rgba(0,0,0,0.95)] dark:hover:border-white/18 dark:hover:bg-[linear-gradient(145deg,rgba(34,38,45,0.98),rgba(18,21,27,0.95))] dark:hover:shadow-[0_26px_76px_-42px_rgba(0,0,0,0.98)]";
