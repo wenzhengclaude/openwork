@@ -29,9 +29,12 @@ function resolveAppVersion(app) {
   }
   return _cachedAppVersion;
 }
+const DEFAULT_OPEN_ONE_UPDATE_URL = "http://10.10.16.164:13006";
+const OPEN_ONE_UPDATE_URL =
+  process.env.OPEN_ONE_UPDATE_BASE_URL?.trim().replace(/\/+$/, "") || DEFAULT_OPEN_ONE_UPDATE_URL;
 const ELECTRON_UPDATER_FEEDS = Object.freeze({
-  stable: "https://github.com/different-ai/openwork/releases/latest/download",
-  alpha: "https://github.com/different-ai/openwork/releases/download/alpha-macos-latest",
+  stable: OPEN_ONE_UPDATE_URL,
+  alpha: OPEN_ONE_UPDATE_URL,
 });
 
 function normalizeElectronUpdaterChannel(value) {
@@ -65,7 +68,7 @@ async function writeElectronUpdaterChannel(app, channel) {
   return normalized;
 }
 
-function electronUpdaterFeedUrl(channel) {
+export function electronUpdaterFeedUrl(channel) {
   return ELECTRON_UPDATER_FEEDS[normalizeElectronUpdaterChannel(channel)];
 }
 

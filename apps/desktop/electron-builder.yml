@@ -36,14 +36,10 @@ asarUnpack:
 npmRebuild: false
 afterPack: scripts/electron-after-pack.cjs
 afterSign: scripts/electron-after-sign.cjs
-# electron-updater feed. Matches the existing release workflow's GitHub target
-# so both Tauri (latest.json) and Electron (latest*.yml) can live on the same
-# release assets during the migration window.
+# Electron updates are served by the Open One internal download site.
 publish:
-  - provider: github
-    owner: different-ai
-    repo: openwork
-    releaseType: release
+  - provider: generic
+    url: http://10.10.16.164:13006
 mac:
   icon: resources/icons/icon.icns
   category: public.app-category.developer-tools
