@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Model Context Protocol">
+  <rect width="180" height="180" rx="24" fill="#050505"/>
+  <path d="M23.6 85.253 86.202 22.651c8.644-8.644 22.658-8.644 31.301 0 8.644 8.643 8.644 22.657 0 31.301L70.225 101.23" fill="none" stroke="#fff" stroke-width="11.067" stroke-linecap="round"/>
+  <path d="m70.879 100.578 46.625-46.626c8.644-8.644 22.659-8.644 31.302 0l.326.326c8.644 8.644 8.644 22.658 0 31.301l-56.618 56.619c-2.881 2.881-2.881 7.552 0 10.433l11.626 11.626" fill="none" stroke="#fff" stroke-width="11.067" stroke-linecap="round"/>
+  <path d="m101.853 38.301-46.3 46.3c-8.644 8.644-8.644 22.657 0 31.301 8.644 8.644 22.658 8.644 31.301 0l46.3-46.3" fill="none" stroke="#fff" stroke-width="11.067" stroke-linecap="round"/>
+</svg>

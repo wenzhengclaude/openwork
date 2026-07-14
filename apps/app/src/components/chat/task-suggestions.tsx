@@ -10,7 +10,7 @@ import {
 import { useMessageList } from "@/components/chat/message-list-provider"
 import { cn } from "@/lib/utils"
 import { useOrgRestrictions } from "@/react-app/domains/cloud/desktop-config-provider"
-import { BoltIcon, CubeIcon, DocumentChartBarIcon, GlobeAltIcon, SparklesIcon } from "@heroicons/react/24/solid"
+import { TaskSuggestionVisual, taskSuggestionButtonClass } from "./task-suggestion-visuals"
 
 const CSV_PROMPT =
   "Create a sample CSV file with 20 rows of fake customer data (name, email, company, revenue). Then show me a summary of the data."
@@ -48,7 +48,7 @@ export function TaskSuggestions({ className }: TaskSuggestionsProps) {
         {noProviders ? (
           <DescriptiveButton
             orientation="vertical"
-            className="border-blue-7/50 bg-blue-2/30 hover:bg-blue-3/40 @lg:col-span-2 @2xl:col-span-3"
+            className={cn(taskSuggestionButtonClass, "border-blue-7/50 bg-blue-2/30 hover:bg-blue-3/40 @lg:col-span-2 @2xl:col-span-3")}
             onClick={() =>
               dispatchAction({
                 target: "settings",
@@ -58,7 +58,7 @@ export function TaskSuggestions({ className }: TaskSuggestionsProps) {
             }
           >
             <DescriptiveButtonIcon>
-              <BoltIcon className="size-6 text-blue-10" aria-hidden />
+              <TaskSuggestionVisual kind="provider" />
             </DescriptiveButtonIcon>
             <DescriptiveButtonContent>
               <DescriptiveButtonTitle>Connect a model provider</DescriptiveButtonTitle>
@@ -71,9 +71,14 @@ export function TaskSuggestions({ className }: TaskSuggestionsProps) {
 
         {hasOrganizationPrompts ? (
           organizationPrompts.map((prompt, index) => (
-            <DescriptiveButton key={`${index}-${prompt}`} orientation="vertical" onClick={() => setPrompt(prompt)}>
+            <DescriptiveButton
+              key={`${index}-${prompt}`}
+              orientation="vertical"
+              className={taskSuggestionButtonClass}
+              onClick={() => setPrompt(prompt)}
+            >
               <DescriptiveButtonIcon>
-                <SparklesIcon className="size-6 text-purple-10" aria-hidden />
+                <TaskSuggestionVisual kind="prompt" />
               </DescriptiveButtonIcon>
               <DescriptiveButtonContent>
                 <DescriptiveButtonTitle>{ORGANIZATION_PROMPT_TITLES[index] ?? "Organization prompt"}</DescriptiveButtonTitle>
@@ -83,9 +88,9 @@ export function TaskSuggestions({ className }: TaskSuggestionsProps) {
           ))
         ) : (
           <>
-            <DescriptiveButton orientation="vertical" onClick={() => setPrompt(CSV_PROMPT)}>
+            <DescriptiveButton orientation="vertical" className={taskSuggestionButtonClass} onClick={() => setPrompt(CSV_PROMPT)}>
               <DescriptiveButtonIcon>
-                <DocumentChartBarIcon className="size-6 text-green-10" aria-hidden />
+                <TaskSuggestionVisual kind="csv" />
               </DescriptiveButtonIcon>
               <DescriptiveButtonContent>
                 <DescriptiveButtonTitle>Edit a CSV</DescriptiveButtonTitle>
@@ -93,9 +98,9 @@ export function TaskSuggestions({ className }: TaskSuggestionsProps) {
               </DescriptiveButtonContent>
             </DescriptiveButton>
 
-            <DescriptiveButton orientation="vertical" onClick={() => setPrompt(BROWSER_PROMPT)}>
+            <DescriptiveButton orientation="vertical" className={taskSuggestionButtonClass} onClick={() => setPrompt(BROWSER_PROMPT)}>
               <DescriptiveButtonIcon>
-                <GlobeAltIcon className="size-6 text-blue-10" aria-hidden />
+                <TaskSuggestionVisual kind="browser" />
               </DescriptiveButtonIcon>
               <DescriptiveButtonContent>
                 <DescriptiveButtonTitle>Browse the web</DescriptiveButtonTitle>
@@ -105,6 +110,7 @@ export function TaskSuggestions({ className }: TaskSuggestionsProps) {
 
             <DescriptiveButton
               orientation="vertical"
+              className={taskSuggestionButtonClass}
               onClick={() =>
                 dispatchAction({
                   target: "settings",
@@ -114,7 +120,7 @@ export function TaskSuggestions({ className }: TaskSuggestionsProps) {
               }
             >
               <DescriptiveButtonIcon>
-                <CubeIcon className="size-6 text-amber-10" aria-hidden />
+                <TaskSuggestionVisual kind="extension" />
               </DescriptiveButtonIcon>
               <DescriptiveButtonContent>
                 <DescriptiveButtonTitle>Connect an extension</DescriptiveButtonTitle>

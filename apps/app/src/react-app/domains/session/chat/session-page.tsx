@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
 import { ArrowLeft, ArrowRight, Cloud, Columns2, FileText, Globe, Mic2, Settings2, TextSearch, X, Zap } from "lucide-react";
 
-import { resolveExtensionIconSrc } from "@/react-app/design-system/extension-icon-src";
+import { TaskSuggestionVisual, taskSuggestionButtonClass } from "@/components/chat/task-suggestion-visuals";
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
 import { buildDenAuthUrl, readDenBootstrapConfig } from "../../../../app/lib/den";
@@ -1321,10 +1321,10 @@ export function SessionPage(props: SessionPageProps) {
                           {providerCount === 0 ? (
                             <button
                               type="button"
-                              className="flex w-full items-start gap-3 rounded-xl border border-blue-7/50 bg-blue-2/40 p-3.5 text-left transition-colors hover:bg-blue-3/50"
+                              className={cn("flex w-full items-start gap-3 text-left", taskSuggestionButtonClass)}
                               onClick={() => props.onOpenProviderAuth?.()}
                             >
-                              <Zap className="mt-0.5 size-5 shrink-0 text-blue-10" />
+                              <TaskSuggestionVisual kind="provider" className="size-9" />
                               <div>
                                 <div className="text-[13px] font-medium text-dls-text">Connect a model provider</div>
                                 <div className="mt-0.5 text-[11px] text-dls-secondary">
@@ -1335,7 +1335,7 @@ export function SessionPage(props: SessionPageProps) {
                           ) : null}
                           <button
                             type="button"
-                            className="flex w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:bg-dls-hover"
+                            className={cn("flex w-full items-start gap-3 text-left", taskSuggestionButtonClass)}
                             onClick={() => {
                               props.sidebar.onCreateTaskWithPrompt?.(
                                 props.selectedWorkspaceId,
@@ -1343,7 +1343,7 @@ export function SessionPage(props: SessionPageProps) {
                               );
                             }}
                           >
-                            <img src="https://cdn.simpleicons.org/googlesheets" alt="" width={20} height={20} className="mt-0.5 shrink-0" />
+                            <TaskSuggestionVisual kind="csv" className="size-9" />
                             <div>
                               <div className="text-[13px] font-medium text-dls-text">Edit a CSV</div>
                               <div className="mt-0.5 text-[11px] text-dls-secondary">Create a sample spreadsheet with customer data</div>
@@ -1351,7 +1351,7 @@ export function SessionPage(props: SessionPageProps) {
                           </button>
                           <button
                             type="button"
-                            className="flex w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:bg-dls-hover"
+                            className={cn("flex w-full items-start gap-3 text-left", taskSuggestionButtonClass)}
                             onClick={() => {
                               props.sidebar.onCreateTaskWithPrompt?.(
                                 props.selectedWorkspaceId,
@@ -1359,7 +1359,7 @@ export function SessionPage(props: SessionPageProps) {
                               );
                             }}
                           >
-                            <img src={resolveExtensionIconSrc("/open-one-mark.svg")} alt="" width={20} height={20} className="mt-0.5 shrink-0" />
+                            <TaskSuggestionVisual kind="browser" className="size-9" />
                             <div>
                               <div className="text-[13px] font-medium text-dls-text">Browse the web</div>
                               <div className="mt-0.5 text-[11px] text-dls-secondary">Search Craigslist for couches and list the results</div>
@@ -1367,12 +1367,12 @@ export function SessionPage(props: SessionPageProps) {
                           </button>
                           <button
                             type="button"
-                            className="flex w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:bg-dls-hover"
+                            className={cn("flex w-full items-start gap-3 text-left", taskSuggestionButtonClass)}
                             onClick={() => {
                               props.onOpenSettings?.();
                             }}
                           >
-                            <img src="https://cdn.simpleicons.org/hackthebox" alt="" width={20} height={20} className="mt-0.5 shrink-0" />
+                            <TaskSuggestionVisual kind="extension" className="size-9" />
                             <div>
                               <div className="text-[13px] font-medium text-dls-text">Connect an extension</div>
                               <div className="mt-0.5 text-[11px] text-dls-secondary">Add MCP servers, plugins, and integrations</div>

@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 
-import { resolveExtensionIconSrc } from "./extension-icon-src";
+import { OpenOneMark } from "./open-one-mark";
 
 export type WorkspaceIconProps = {
   workspaceId: string;
@@ -9,12 +9,5 @@ export type WorkspaceIconProps = {
 };
 
 export function WorkspaceIcon({ workspaceId: _workspaceId, sizeClass = "size-4" }: WorkspaceIconProps) {
-  return (
-    <img
-      src={resolveExtensionIconSrc("/open-one-mark.svg")}
-      alt=""
-      aria-hidden="true"
-      className={`${sizeClass} shrink-0`}
-    />
-  );
+  return <OpenOneMark className={sizeClass} />;
 }

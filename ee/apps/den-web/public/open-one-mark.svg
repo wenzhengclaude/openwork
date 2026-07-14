@@ -1,7 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
-  <rect width="256" height="256" rx="56" fill="#F4F8F6"/>
-  <path d="M128 48C81.6 48 58 78.1 58 128s23.6 80 70 80c22.7 0 40.6-6.8 53.7-20.3" stroke="#123047" stroke-width="24" stroke-linecap="round"/>
-  <path d="M158 75l27 25v83" stroke="#00A78E" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M151 183h48" stroke="#00A78E" stroke-width="24" stroke-linecap="round"/>
-  <circle cx="184" cy="68" r="11" fill="#F2B84B"/>
+  <defs>
+    <radialGradient id="spark" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(193 54) rotate(103) scale(106 92)">
+      <stop stop-color="#FAD34B"/>
+      <stop offset=".28" stop-color="#17C5B5"/>
+      <stop offset="1" stop-color="#071827" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bg" x1="38" x2="218" y1="28" y2="232" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#123CE7"/>
+      <stop offset=".45" stop-color="#071827"/>
+      <stop offset="1" stop-color="#071827"/>
+    </linearGradient>
+    <linearGradient id="one" x1="155" x2="206" y1="69" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B8FFF2"/>
+      <stop offset=".55" stop-color="#32D0BF"/>
+      <stop offset="1" stop-color="#0B9F92"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#bg)"/>
+  <rect width="256" height="256" rx="58" fill="url(#spark)"/>
+  <path d="M128 45C80 45 49 78 49 128s31 83 79 83c34 0 61-16 76-43" stroke="white" stroke-opacity=".9" stroke-width="23" stroke-linecap="round"/>
+  <path d="M158 73l29 25v86" stroke="url(#one)" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M148 184h60" stroke="url(#one)" stroke-width="23" stroke-linecap="round"/>
+  <circle cx="193" cy="58" r="12" fill="#FAD34B"/>
+  <path d="M41 72c24-31 59-46 102-44" stroke="white" stroke-opacity=".22" stroke-width="6" stroke-linecap="round"/>
 </svg>
