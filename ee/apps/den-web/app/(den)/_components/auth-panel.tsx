@@ -168,7 +168,7 @@ export function AuthPanel({
   } = useDenFlow();
   const isSingleOrgMode = runtimeConfigLoaded && runtimeConfig.orgMode === "single_org";
   const isSingleOrgSsoMode = isSingleOrgMode && runtimeConfig.singleOrgSsoConfigured;
-  const singleOrgName = runtimeConfig.singleOrgName || "OpenWork";
+  const singleOrgName = runtimeConfig.singleOrgName || "Open One";
   const singleOrgSlug = runtimeConfig.singleOrgSlug.trim();
 
   useEffect(() => {
@@ -221,7 +221,7 @@ export function AuthPanel({
   const emailFirstContent: PanelContent =
     emailFirstStep === "email"
       ? {
-          title: "Continue to OpenWork.",
+          title: "Continue to Open One.",
           copy: "Enter your email and we'll send you to the right sign-in step.",
           submitLabel: "Next",
         }
@@ -251,7 +251,7 @@ export function AuthPanel({
         }
       : {
           title: "Create your account.",
-          copy: "Set up your OpenWork Cloud account.",
+          copy: "Set up your Open One account.",
           submitLabel: "Sign up",
         };
 
@@ -448,7 +448,7 @@ export function AuthPanel({
           className="den-button-primary w-full"
           onClick={() => window.location.assign(desktopRedirectUrl)}
         >
-          Open OpenWork
+          Open Open One
           <ArrowRight className="h-4 w-4" />
         </button>
 
@@ -510,7 +510,7 @@ export function AuthPanel({
               className="den-button-primary w-full"
               onClick={() => window.location.assign(desktopRedirectUrl)}
             >
-              Open OpenWork
+              Open Open One
               <ArrowRight className="h-4 w-4" />
             </button>
             <p className="m-0 text-center text-xs text-[var(--dls-text-secondary)]">
@@ -736,7 +736,7 @@ export function AuthPanel({
             className="den-button-primary w-full"
             onClick={() => window.location.assign(desktopRedirectUrl)}
           >
-            Open OpenWork
+            Open Open One
             <ArrowRight className="h-4 w-4" />
           </button>
           <p className="m-0 text-center text-xs text-[var(--dls-text-secondary)]">

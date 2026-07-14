@@ -474,7 +474,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
     }
 
     if (desktopAuthRequested) {
-      setAuthInfo("Signed in. Returning to OpenWork...");
+      setAuthInfo("Signed in. Returning to Open One...");
       return null;
     }
 
@@ -1004,14 +1004,14 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
       const openworkPayload = payload as { openworkUrl?: unknown } | null;
       const openworkUrl = typeof openworkPayload?.openworkUrl === "string" ? openworkPayload.openworkUrl.trim() : "";
       if (!openworkUrl) {
-        setAuthError("Desktop handoff succeeded, but no OpenWork redirect URL was returned.");
+        setAuthError("Desktop handoff succeeded, but no Open One redirect URL was returned.");
         return;
       }
 
       setDesktopRedirectUrl(openworkUrl);
       window.location.assign(openworkUrl);
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Failed to open OpenWork.");
+      setAuthError(error instanceof Error ? error.message : "Failed to open Open One.");
     } finally {
       setDesktopRedirectBusy(false);
     }

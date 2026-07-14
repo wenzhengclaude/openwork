@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 
 import { ProviderIcon } from "./provider-icon";
+import { resolveExtensionIconSrc } from "./extension-icon-src";
 
 type ModelBrand = {
   file: string;
@@ -56,7 +57,7 @@ export function ModelBrandIcon({
 
   return (
     <img
-      src={`/model-brands/${brand.file}`}
+      src={resolveExtensionIconSrc(`/model-brands/${brand.file}`)}
       alt={`${brand.label} logo`}
       className={`shrink-0 object-contain ${brand.monochrome ? "dark:invert" : ""} ${className ?? ""}`}
       width={size}

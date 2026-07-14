@@ -1,5 +1,7 @@
 /** @jsxImportSource react */
 
+import { resolveExtensionIconSrc } from "./extension-icon-src";
+
 export type WorkspaceIconProps = {
   workspaceId: string;
   /** CSS size class, e.g. "size-4", "size-5.5". Defaults to "size-4". */
@@ -9,7 +11,7 @@ export type WorkspaceIconProps = {
 export function WorkspaceIcon({ workspaceId: _workspaceId, sizeClass = "size-4" }: WorkspaceIconProps) {
   return (
     <img
-      src="/open-one-mark.svg"
+      src={resolveExtensionIconSrc("/open-one-mark.svg")}
       alt=""
       aria-hidden="true"
       className={`${sizeClass} shrink-0`}
