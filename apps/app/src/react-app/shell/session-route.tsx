@@ -615,7 +615,7 @@ export function SessionRoute() {
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
   });
-  const { providerCatalog, modelVariantLabel, modelBehaviorOptions, modelVariantValue, modelContextWindow } =
+  const { providerCatalog, modelVariantLabel, modelBehaviorOptions, modelVariantValue, modelContextWindow, modelImageInputSupported } =
     useModelBehavior({
       providerList: providerListQuery.data,
       defaultModel: local.prefs.defaultModel,
@@ -944,6 +944,7 @@ export function SessionRoute() {
       },
       attachmentsEnabled: true,
       attachmentsDisabledReason: null,
+      modelImageInputSupported,
       modelVariantLabel,
       modelVariant: modelVariantValue,
       modelBehaviorOptions,
@@ -1036,6 +1037,7 @@ export function SessionRoute() {
     listSlashCommands,
     modelBehaviorOptions,
     modelContextWindow,
+    modelImageInputSupported,
     modelLabel,
     modelVariantLabel,
     modelVariantValue,

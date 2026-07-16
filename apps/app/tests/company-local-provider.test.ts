@@ -4,7 +4,9 @@ import {
   buildCompanyLocalProviderConfig,
   COMPANY_LOCAL_PROVIDER_ID,
   COMPANY_LOCAL_PROVIDER_NAME,
+  companyLocalModelSupportsImageInput,
   resolveCompanyLocalReasoningEffort,
+  setCompanyLocalModelImageInput,
 } from "../src/react-app/domains/settings/company-local-provider";
 
 describe("company local provider config", () => {
@@ -59,5 +61,31 @@ describe("company local provider config", () => {
     });
     expect(resolveCompanyLocalReasoningEffort(COMPANY_LOCAL_PROVIDER_ID, "gpt-5.5", "high")).toBe("high");
     expect(resolveCompanyLocalReasoningEffort(COMPANY_LOCAL_PROVIDER_ID, "claude-opus", "high")).toBeUndefined();
+  });
+
+  test("persists image input support for multimodal models", () => {
+    const model = setCompanyLocalModelImageInput({
+      id: "minimax-m27-with-qwen-vl",
+      name: "MiniMax M27 with Qwen VL",
+    }, true);
+
+    expect(companyLocalModelSupportsImageInput(model)).toBe(true);
+    expect(buildCompanyLocalProviderConfig({
+      baseUrl: "http://models.example.test/v1",
+      models: [model],
+    })).toEqual({
+      [COMPANY_LOCAL_PROVIDER_ID]: {
+        npm: "@ai-sdk/openai-compatible",
+        name: COMPANY_LOCAL_PROVIDER_NAME,
+        options: { baseURL: "http://models.example.test/v1" },
+        models: {
+          "minimax-m27-with-qwen-vl": {
+            name: "MiniMax M27 with Qwen VL",
+            modalities: { input: ["text", "image"], output: ["text"] },
+            attachment: true,
+          },
+        },
+      },
+    });
   });
 });

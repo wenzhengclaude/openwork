@@ -6,6 +6,10 @@ export type OpenAiCompatibleModel = {
   contextWindow?: number;
   outputLimit?: number;
   reasoning?: boolean;
+  modalities?: {
+    input: string[];
+    output: string[];
+  };
 };
 
 export type OpenAiCompatibleModelsResult = {
@@ -45,6 +49,76 @@ function readFirstPositiveInteger(value: Record<string, unknown>, keys: string[]
 function readBoolean(value: Record<string, unknown>, key: string): boolean | undefined {
   const candidate = value[key];
   return typeof candidate === "boolean" ? candidate : undefined;
+}
+
+const SUPPORTED_MODALITIES = new Set(["text", "image", "audio", "video", "pdf"]);
+
+function normalizeModality(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    images: "image",
+    vision: "image",
+    image_url: "image",
+    imageurl: "image",
+    files: "pdf",
+  };
+  const modality = aliases[normalized] ?? normalized;
+  return SUPPORTED_MODALITIES.has(modality) ? modality : undefined;
+}
+
+function normalizeModalities(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.flatMap((entry) => {
+    const modality = normalizeModality(entry);
+    return modality ? [modality] : [];
+  })));
+}
+
+function readModalities(value: Record<string, unknown>, keys: string[]): string[] {
+  return Array.from(new Set(keys.flatMap((key) => normalizeModalities(value[key]))));
+}
+
+function hasImageCapability(value: Record<string, unknown>): boolean {
+  return [
+    "multimodal",
+    "vision",
+    "supports_vision",
+    "supports_image_input",
+    "supports_images",
+    "image_input",
+  ].some((key) => readBoolean(value, key) === true);
+}
+
+function inferImageInputFromModelId(modelId: string): boolean {
+  return /(?:^|[-_./])(?:qwen(?:[-_.]?\d+(?:[-_.]\d+)?)?[-_.]?vl|llava|internvl|minicpm[-_.]?v|glm[-_.]?4v|gpt[-_.]?4o|vision|multimodal)(?:[-_./]|$)/i.test(modelId);
+}
+
+function resolveModalities(item: Record<string, unknown>, capabilities: Record<string, unknown>, modelId: string) {
+  const itemModalities = isRecord(item.modalities) ? item.modalities : undefined;
+  const capabilityModalities = isRecord(capabilities.modalities) ? capabilities.modalities : undefined;
+  const input = Array.from(new Set([
+    ...readModalities(item, ["input_modalities", "inputModalities"]),
+    ...readModalities(capabilities, ["input_modalities", "inputModalities"]),
+    ...normalizeModalities(item.modalities),
+    ...normalizeModalities(capabilities.modalities),
+    ...normalizeModalities(itemModalities?.input),
+    ...normalizeModalities(capabilityModalities?.input),
+  ]));
+  const output = Array.from(new Set([
+    ...readModalities(item, ["output_modalities", "outputModalities"]),
+    ...readModalities(capabilities, ["output_modalities", "outputModalities"]),
+    ...normalizeModalities(itemModalities?.output),
+    ...normalizeModalities(capabilityModalities?.output),
+  ]));
+  const supportsImages = hasImageCapability(item) || hasImageCapability(capabilities) || inferImageInputFromModelId(modelId);
+  if (supportsImages && !input.includes("image")) input.push("image");
+  if (supportsImages && !input.includes("text")) input.unshift("text");
+  if (!input.length && !output.length) return undefined;
+  return {
+    input,
+    output: output.length ? output : ["text"],
+  };
 }
 
 export function isPrivateNetworkHost(input: string): boolean {
@@ -122,12 +196,14 @@ export function parseOpenAiCompatibleModels(payload: unknown): OpenAiCompatibleM
       "output_token_limit",
     ]);
     const reasoning = readBoolean(item, "supports_reasoning") ?? readBoolean(item, "reasoning") ?? readBoolean(capabilities, "reasoning");
+    const modalities = resolveModalities(item, capabilities, id);
     models.set(id, {
       id,
       name,
       ...(contextWindow === undefined ? {} : { contextWindow }),
       ...(outputLimit === undefined ? {} : { outputLimit }),
       ...(reasoning === true ? { reasoning: true } : {}),
+      ...(modalities === undefined ? {} : { modalities }),
     });
     if (models.size >= MAX_MODELS) break;
   }

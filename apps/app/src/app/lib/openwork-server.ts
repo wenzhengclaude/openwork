@@ -44,6 +44,10 @@ export type OpenAiCompatibleProviderModel = {
   contextWindow?: number;
   outputLimit?: number;
   reasoning?: boolean;
+  modalities?: {
+    input: string[];
+    output: string[];
+  };
 };
 
 export type OpenAiCompatibleProviderModelsResult = {

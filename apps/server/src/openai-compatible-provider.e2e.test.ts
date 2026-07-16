@@ -81,8 +81,18 @@ describe("OpenAI-compatible model probe", () => {
           authorization = request.headers.get("authorization") ?? "";
           return Response.json({
             data: [
-              { id: "model-a", name: "Model A", context_window: 128000, max_output_tokens: 4096, supports_reasoning: true },
-              { id: "model-b" },
+              {
+                id: "model-a",
+                name: "Model A",
+                context_window: 128000,
+                max_output_tokens: 4096,
+                supports_reasoning: true,
+                capabilities: {
+                  input_modalities: ["text", "image"],
+                  output_modalities: ["text"],
+                },
+              },
+              { id: "minimax-m27-with-qwen-vl" },
               { id: "model-a", name: "Duplicate" },
             ],
           });
@@ -105,8 +115,19 @@ describe("OpenAI-compatible model probe", () => {
     expect(await response.json()).toEqual({
       baseUrl: "http://models.example.test/v1",
       models: [
-        { id: "model-a", name: "Model A", contextWindow: 128000, outputLimit: 4096, reasoning: true },
-        { id: "model-b", name: "model-b" },
+        {
+          id: "model-a",
+          name: "Model A",
+          contextWindow: 128000,
+          outputLimit: 4096,
+          reasoning: true,
+          modalities: { input: ["text", "image"], output: ["text"] },
+        },
+        {
+          id: "minimax-m27-with-qwen-vl",
+          name: "minimax-m27-with-qwen-vl",
+          modalities: { input: ["text", "image"], output: ["text"] },
+        },
       ],
     });
   });

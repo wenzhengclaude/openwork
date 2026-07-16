@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { getModelBehaviorSummary } from "@/app/lib/model-behavior";
+import { getModelImageInputSupport } from "@/app/lib/model-modalities";
 import type { ModelRef, ProviderListItem } from "@/app/types";
 import { t } from "@/i18n";
 
@@ -44,7 +45,7 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
 
   // Compute behavior (reasoning/thinking variant) options for the current
   // default model.
-  const { modelVariantLabel, modelBehaviorOptions, modelVariantValue, modelContextWindow, modelOutputLimit } = useMemo(() => {
+  const { modelVariantLabel, modelBehaviorOptions, modelVariantValue, modelContextWindow, modelOutputLimit, modelImageInputSupported } = useMemo(() => {
     const variant = modelVariant ?? null;
     if (!defaultModel) {
       return {
@@ -53,6 +54,7 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
         modelVariantValue: null,
         modelContextWindow: null,
         modelOutputLimit: null,
+        modelImageInputSupported: null,
       };
     }
     const model = providerCatalog[defaultModel.providerID]?.[defaultModel.modelID];
@@ -63,6 +65,7 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
         modelVariantValue: variant,
         modelContextWindow: null,
         modelOutputLimit: null,
+        modelImageInputSupported: null,
       };
     }
     const summary = getModelBehaviorSummary(defaultModel.providerID, model, variant);
@@ -72,6 +75,7 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
       modelVariantValue: summary.value,
       modelContextWindow: tokenLimit(model.limit?.context),
       modelOutputLimit: tokenLimit(model.limit?.output),
+      modelImageInputSupported: getModelImageInputSupport(model),
     };
   }, [defaultModel, modelVariant, providerCatalog]);
 
@@ -82,5 +86,6 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
     modelVariantValue,
     modelContextWindow,
     modelOutputLimit,
+    modelImageInputSupported,
   };
 }

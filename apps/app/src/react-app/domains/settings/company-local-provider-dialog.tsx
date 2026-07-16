@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useMemo, useState } from "react";
-import { Check, Loader2, RefreshCw, Server } from "lucide-react";
+import { Check, ImageIcon, Loader2, RefreshCw, Server } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,9 @@ import { Input } from "@/components/ui/input";
 import type { OpenAiCompatibleProviderModelsResult } from "@/app/lib/openwork-server";
 import {
   COMPANY_LOCAL_PROVIDER_NAME,
+  companyLocalModelSupportsImageInput,
   companyLocalModelSupportsReasoning,
+  setCompanyLocalModelImageInput,
   type CompanyLocalProviderInstallInput,
   type CompanyLocalProviderModel,
 } from "./company-local-provider";
@@ -32,7 +34,7 @@ type CompanyLocalProviderDialogProps = {
 };
 
 function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : "无法连接模型服务。";
+  return error instanceof Error ? error.message : "\u65e0\u6cd5\u8fde\u63a5\u6a21\u578b\u670d\u52a1\u3002";
 }
 
 function formatTokenLimit(value: number | undefined): string | null {
@@ -114,13 +116,15 @@ export function CompanyLocalProviderDialog(props: CompanyLocalProviderDialogProp
             <Server className="size-4" />
             {COMPANY_LOCAL_PROVIDER_NAME}
           </DialogTitle>
-          <DialogDescription>API 地址与密钥只保存在当前设备。</DialogDescription>
+          <DialogDescription>
+            {"API \u5730\u5740\u4e0e\u5bc6\u94a5\u53ea\u4fdd\u5b58\u5728\u5f53\u524d\u8bbe\u5907\u3002"}
+          </DialogDescription>
         </DialogHeader>
 
         <FieldSet className="min-h-0 gap-4 overflow-y-auto pr-1">
           <FieldGroup className="gap-4">
             <Field>
-              <FieldLabel htmlFor="company-local-provider-url">API 地址</FieldLabel>
+              <FieldLabel htmlFor="company-local-provider-url">{"API \u5730\u5740"}</FieldLabel>
               <Input
                 id="company-local-provider-url"
                 value={baseUrl}
@@ -145,11 +149,11 @@ export function CompanyLocalProviderDialog(props: CompanyLocalProviderDialogProp
 
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm text-muted-foreground">
-              {models.length ? `已发现 ${models.length} 个模型` : ""}
+              {models.length ? `\u5df2\u53d1\u73b0 ${models.length} \u4e2a\u6a21\u578b` : ""}
             </div>
             <Button type="button" variant="outline" onClick={() => void discover()} disabled={busy || !baseUrl.trim() || !apiKey.trim()}>
               {discovering ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-              检测模型
+              {"\u68c0\u6d4b\u6a21\u578b"}
             </Button>
           </div>
 
@@ -161,28 +165,46 @@ export function CompanyLocalProviderDialog(props: CompanyLocalProviderDialogProp
                   onCheckedChange={(checked) => setSelectedIds(checked === true ? models.map((model) => model.id) : [])}
                   disabled={busy}
                 />
-                使用全部模型
+                {"\u4f7f\u7528\u5168\u90e8\u6a21\u578b"}
               </label>
-              <div className="max-h-56 overflow-y-auto py-1">
-                {models.map((model) => (
-                  <label key={model.id} className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-muted/40">
-                    <Checkbox
-                      checked={selectedModelIds.has(model.id)}
-                      onCheckedChange={(checked) => {
-                        setSelectedIds((current) => checked === true
-                          ? Array.from(new Set([...current, model.id]))
-                          : current.filter((id) => id !== model.id));
-                      }}
-                      disabled={busy}
-                    />
-                    <span className="min-w-0 truncate">{model.name}</span>
-                    <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                      {companyLocalModelSupportsReasoning(model) ? <span>推理</span> : null}
-                      {formatTokenLimit(model.contextWindow) ? <span>{formatTokenLimit(model.contextWindow)} 上下文</span> : null}
-                      {model.name !== model.id ? <span className="font-mono">{model.id}</span> : null}
-                    </span>
-                  </label>
-                ))}
+              <div className="max-h-64 overflow-y-auto py-1">
+                {models.map((model) => {
+                  const supportsImageInput = companyLocalModelSupportsImageInput(model);
+                  return (
+                    <div key={model.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/40">
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                        <Checkbox
+                          checked={selectedModelIds.has(model.id)}
+                          onCheckedChange={(checked) => {
+                            setSelectedIds((current) => checked === true
+                              ? Array.from(new Set([...current, model.id]))
+                              : current.filter((id) => id !== model.id));
+                          }}
+                          disabled={busy}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{model.name}</span>
+                        <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                          {companyLocalModelSupportsReasoning(model) ? <span>{"\u63a8\u7406"}</span> : null}
+                          {formatTokenLimit(model.contextWindow) ? <span>{formatTokenLimit(model.contextWindow)} {"\u4e0a\u4e0b\u6587"}</span> : null}
+                          {model.name !== model.id ? <span className="hidden font-mono lg:inline">{model.id}</span> : null}
+                        </span>
+                      </label>
+                      <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={supportsImageInput}
+                          onCheckedChange={(checked) => {
+                            setModels((current) => current.map((item) => item.id === model.id
+                              ? setCompanyLocalModelImageInput(item, checked === true)
+                              : item));
+                          }}
+                          disabled={busy}
+                        />
+                        <ImageIcon className="size-3" />
+                        {"\u56fe\u7247\u8f93\u5165"}
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -199,11 +221,11 @@ export function CompanyLocalProviderDialog(props: CompanyLocalProviderDialogProp
 
         <DialogFooter>
           <DialogClose disabled={busy} render={<Button variant="outline" disabled={busy} />}>
-            取消
+            {"\u53d6\u6d88"}
           </DialogClose>
           <Button type="button" onClick={() => void save()} disabled={busy || !resolvedBaseUrl || !apiKey.trim() || !selectedModels.length}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            保存到本机
+            {"\u4fdd\u5b58\u5230\u672c\u673a"}
           </Button>
         </DialogFooter>
       </DialogContent>

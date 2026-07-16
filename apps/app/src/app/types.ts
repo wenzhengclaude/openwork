@@ -427,6 +427,7 @@ export type ModelOption = {
   contextWindow?: number;
   outputLimit?: number;
   supportsReasoning?: boolean;
+  supportsImageInput?: boolean;
   disabled?: boolean;
   isFree: boolean;
   isConnected: boolean;

@@ -27,10 +27,17 @@ export function BashTool({ part }: BashToolProps) {
             </span>
           </span>
         </CollapsibleToolTrigger>
-        <CollapsibleToolContent className="bg-muted rounded-lg p-2">
-          <div className="flex flex-col gap-2 text-xs">
-            <pre>$ {part.input.command}</pre>
-            <pre className="opacity-80">{part.output}</pre>
+        <CollapsibleToolContent className="mt-1 overflow-hidden rounded-lg border border-border/70 bg-muted/70 p-1.5">
+          <div
+            aria-label="Command output"
+            className="max-h-72 overflow-auto rounded-md bg-background/70 font-mono text-[12px] leading-5 [scrollbar-gutter:stable_both-edges]"
+          >
+            <pre className="m-0 min-w-max whitespace-pre px-3 py-2 text-foreground">$ {part.input.command}</pre>
+            {part.output ? (
+              <pre className="m-0 min-w-max border-t border-border/60 px-3 py-2 whitespace-pre text-muted-foreground">
+                {part.output}
+              </pre>
+            ) : null}
           </div>
         </CollapsibleToolContent>
       </CollapsibleToolStep>

@@ -115,6 +115,7 @@ export type SessionSurfaceProps = {
   onDraftChange: (draft: ComposerDraft) => void;
   attachmentsEnabled: boolean;
   attachmentsDisabledReason: string | null;
+  modelImageInputSupported?: boolean | null;
   modelVariantLabel: string;
   modelVariant: string | null;
   modelBehaviorOptions?: { value: string | null; label: string }[];
@@ -930,13 +931,27 @@ export function SessionSurface(props: SessionSurfaceProps) {
       );
     }
     const unreadable = sized.filter((file) => !isModelReadableAttachment(file.type));
-    const accepted = sized.filter((file) => isModelReadableAttachment(file.type));
+    const readable = sized.filter((file) => isModelReadableAttachment(file.type));
     if (unreadable.length) {
       toast.warning(
         unreadable.length === 1
           ? `${unreadable[0]?.name ?? "File"} has a format the model can't read`
           : `${unreadable.length} files have formats the model can't read`,
         { description: "Convert to PDF, image, or plain text and attach again." },
+      );
+    }
+    const unsupportedImages = props.modelImageInputSupported === false
+      ? readable.filter((file) => file.type.startsWith("image/"))
+      : [];
+    const accepted = props.modelImageInputSupported === false
+      ? readable.filter((file) => !file.type.startsWith("image/"))
+      : readable;
+    if (unsupportedImages.length) {
+      toast.warning(
+        unsupportedImages.length === 1
+          ? `${unsupportedImages[0]?.name ?? "Image"} cannot be sent to the selected model`
+          : `${unsupportedImages.length} images cannot be sent to the selected model`,
+        { description: "Choose a model with Image support or enable image input for this company model." },
       );
     }
     if (!accepted.length) return;

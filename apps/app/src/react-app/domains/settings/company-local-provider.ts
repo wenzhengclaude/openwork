@@ -1,5 +1,5 @@
 export const COMPANY_LOCAL_PROVIDER_ID = "company-local";
-export const COMPANY_LOCAL_PROVIDER_NAME = "公司本地模型";
+export const COMPANY_LOCAL_PROVIDER_NAME = "\u516c\u53f8\u672c\u5730\u6a21\u578b";
 
 export type CompanyLocalProviderModel = {
   id: string;
@@ -7,6 +7,10 @@ export type CompanyLocalProviderModel = {
   contextWindow?: number;
   outputLimit?: number;
   reasoning?: boolean;
+  modalities?: {
+    input: string[];
+    output: string[];
+  };
 };
 
 export type CompanyLocalProviderInstallInput = {
@@ -21,8 +25,40 @@ function isKnownOpenAiReasoningModel(modelId: string): boolean {
   return /^gpt[-_.]?5(?:[-_.]|$)/i.test(modelId.trim());
 }
 
+function normalizedModalities(model: Pick<CompanyLocalProviderModel, "modalities">) {
+  const input = Array.from(new Set((model.modalities?.input ?? []).map((modality) => modality.trim().toLowerCase()).filter(Boolean)));
+  const output = Array.from(new Set((model.modalities?.output ?? []).map((modality) => modality.trim().toLowerCase()).filter(Boolean)));
+  if (!input.length && !output.length) return undefined;
+  return {
+    input,
+    output: output.length ? output : ["text"],
+  };
+}
+
 export function companyLocalModelSupportsReasoning(model: Pick<CompanyLocalProviderModel, "id" | "reasoning">): boolean {
   return model.reasoning === true || (model.reasoning !== false && isKnownOpenAiReasoningModel(model.id));
+}
+
+export function companyLocalModelSupportsImageInput(model: Pick<CompanyLocalProviderModel, "modalities">): boolean {
+  return normalizedModalities(model)?.input.includes("image") ?? false;
+}
+
+export function setCompanyLocalModelImageInput(
+  model: CompanyLocalProviderModel,
+  enabled: boolean,
+): CompanyLocalProviderModel {
+  const modalities = normalizedModalities(model);
+  const input = modalities?.input ?? ["text"];
+  const nextInput = enabled
+    ? Array.from(new Set([...input, "image"]))
+    : input.filter((modality) => modality !== "image");
+  return {
+    ...model,
+    modalities: {
+      input: nextInput,
+      output: modalities?.output ?? ["text"],
+    },
+  };
 }
 
 export function resolveCompanyLocalReasoningEffort(
@@ -46,6 +82,7 @@ export function buildCompanyLocalProviderConfig(input: Pick<CompanyLocalProvider
         contextWindow: model.contextWindow,
         outputLimit: model.outputLimit,
         reasoning: model.reasoning,
+        modalities: normalizedModalities(model),
       }))
       .filter((model) => model.id)
       .map((model) => {
@@ -58,6 +95,7 @@ export function buildCompanyLocalProviderConfig(input: Pick<CompanyLocalProvider
           ? reportedOutput
           : undefined;
         const supportsReasoning = companyLocalModelSupportsReasoning(model);
+        const supportsImageInput = companyLocalModelSupportsImageInput(model);
         return [
           model.id,
           {
@@ -78,6 +116,12 @@ export function buildCompanyLocalProviderConfig(input: Pick<CompanyLocalProvider
                   ),
                 }
               : {}),
+            ...(model.modalities === undefined
+              ? {}
+              : {
+                  modalities: model.modalities,
+                  ...(supportsImageInput ? { attachment: true } : {}),
+                }),
           },
         ];
       }),

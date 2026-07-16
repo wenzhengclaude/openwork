@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, ChevronRight, Settings2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, ImageIcon, Settings2, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import type { ModelOption, ModelRef } from "@/app/types";
+import { getModelImageInputSupport } from "@/app/lib/model-modalities";
 import { ModelBrandIcon } from "@/react-app/design-system/model-brand-icon";
 import {
   Popover,
@@ -110,6 +111,7 @@ function useModelOptions(open: boolean) {
           contextWindow: model.limit?.context,
           outputLimit: model.limit?.output,
           supportsReasoning: Object.keys(model.variants ?? {}).length > 0,
+          supportsImageInput: getModelImageInputSupport(model) === true,
           isFree: false,
           isConnected: true,
         })),
@@ -404,10 +406,11 @@ export function ModelSelect({
                             {option.description ??
                               getProviderDisplayName(option.providerID)}
                           </span>
-                          {option.contextWindow || option.supportsReasoning ? (
+                          {option.contextWindow || option.supportsReasoning || option.supportsImageInput ? (
                             <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
                               {formatTokenLimit(option.contextWindow) ? <span>{formatTokenLimit(option.contextWindow)} context</span> : null}
                               {option.supportsReasoning ? <span>Reasoning</span> : null}
+                              {option.supportsImageInput ? <span className="inline-flex items-center gap-0.5"><ImageIcon className="size-2.5" />Image</span> : null}
                             </span>
                           ) : null}
                         </span>
