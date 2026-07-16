@@ -54,6 +54,13 @@ function getProviderDisplayName(providerId: string) {
     .join(" ");
 }
 
+function formatTokenLimit(value: number | undefined): string | null {
+  if (!value || !Number.isFinite(value) || value <= 0) return null;
+  if (value >= 1_000_000) return `${Math.round(value / 1_000_000)}M`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+  return String(value);
+}
+
 function useModelOptions(open: boolean) {
   const { client, opencodeBaseUrl, selectedWorkspaceRoot } = useWorkspace();
   const checkDesktopRestriction = useCheckDesktopRestriction();
@@ -100,6 +107,9 @@ function useModelOptions(open: boolean) {
           behaviorLabel: "Default",
           behaviorDescription: "",
           behaviorValue: null,
+          contextWindow: model.limit?.context,
+          outputLimit: model.limit?.output,
+          supportsReasoning: Object.keys(model.variants ?? {}).length > 0,
           isFree: false,
           isConnected: true,
         })),
@@ -394,6 +404,12 @@ export function ModelSelect({
                             {option.description ??
                               getProviderDisplayName(option.providerID)}
                           </span>
+                          {option.contextWindow || option.supportsReasoning ? (
+                            <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                              {formatTokenLimit(option.contextWindow) ? <span>{formatTokenLimit(option.contextWindow)} context</span> : null}
+                              {option.supportsReasoning ? <span>Reasoning</span> : null}
+                            </span>
+                          ) : null}
                         </span>
                       </CommandItem>
                     );

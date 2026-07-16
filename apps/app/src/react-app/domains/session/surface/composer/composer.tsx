@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { AppWindowMac, ArrowUp, Check, ChevronDown, ChevronRight, FileText, ListPlus, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
+import { AppWindowMac, ArrowUp, Check, ChevronDown, ChevronRight, FileText, Gauge, ListPlus, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { toast } from "@/components/ui/sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -15,6 +15,7 @@ import { useDesktopRestriction } from "@/react-app/domains/cloud/desktop-config-
 import { resolveExtensionIconUrl } from "@/react-app/design-system/extension-icon-src";
 import { ModelBehaviorSelect } from "@/components/model-behavior-select";
 import { ModelSelect } from "@/components/model-select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { LexicalPromptEditor, type LexicalPromptEditorHandle } from "./editor";
 import { listRunningAppsForMention } from "./app-mentions";
 import type { ComposerMentionKind } from "./mention-encoding";
@@ -70,6 +71,8 @@ type ComposerProps = {
   modelVariantLabel: string;
   modelVariant: string | null;
   modelBehaviorOptions?: { value: string | null; label: string; description?: string }[];
+  modelContextWindow?: number | null;
+  contextUsageTokens?: number | null;
   onModelVariantChange: (value: string | null) => void;
   agentLabel: string;
   selectedAgent: string | null;
@@ -112,6 +115,49 @@ const IMAGE_COMPRESS_TARGET_BYTES = 1_500_000;
 const FILE_URL_RE = /^file:\/\//i;
 const HTTP_URL_RE = /^https?:\/\//i;
 const DEFAULT_AGENT_NAME = "openwork";
+
+function formatContextTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+  return String(value);
+}
+
+function ContextWindowIndicator({
+  contextWindow,
+  usageTokens,
+}: {
+  contextWindow: number | null | undefined;
+  usageTokens: number | null | undefined;
+}) {
+  if (!contextWindow || !Number.isFinite(contextWindow) || contextWindow <= 0) return null;
+  const usage = typeof usageTokens === "number" && Number.isFinite(usageTokens) && usageTokens >= 0 ? usageTokens : 0;
+  const percent = Math.min(100, Math.round((usage / contextWindow) * 100));
+  const remaining = Math.max(0, 100 - percent);
+  const color = percent >= 90 ? "#d65d4a" : percent >= 70 ? "#cc8d28" : "#159a8c";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            tabIndex={0}
+            role="img"
+            aria-label={`上下文窗口 ${percent}% 已用`}
+            className="relative inline-flex size-5 shrink-0 items-center justify-center rounded-full"
+            style={{ background: `conic-gradient(${color} ${percent}%, var(--dls-border) 0)` }}
+          >
+            <span className="size-3 rounded-full bg-dls-surface" />
+          </span>
+        }
+      />
+      <TooltipContent className="max-w-56 space-y-1 px-3 py-2 text-left">
+        <p className="font-medium">上下文窗口</p>
+        <p>{percent}% 已用（剩余 {remaining}%）</p>
+        <p>已用 {formatContextTokens(usage)} 标记，共 {formatContextTokens(contextWindow)}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function isNonDefaultAgent(agent: Agent) {
   return agent.name !== DEFAULT_AGENT_NAME;
@@ -1624,6 +1670,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                   ) : null}
                 </div>
 
+                <ContextWindowIndicator
+                  contextWindow={props.modelContextWindow}
+                  usageTokens={props.contextUsageTokens}
+                />
                 <div className="flex h-9 items-center rounded-full bg-gray-3 pr-1">
                   <ModelSelect
                     open={props.modelPickerOpen}

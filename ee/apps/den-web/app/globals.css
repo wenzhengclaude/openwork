@@ -399,6 +399,356 @@ body {
     opacity: 0.72;
 }
 
+.open-one-install-page {
+    min-height: 100dvh;
+    padding: 24px;
+    background: #eaf0ef;
+    color: #10221f;
+}
+
+.open-one-install-nav,
+.open-one-install-hero,
+.open-one-install-details,
+.open-one-install-loading {
+    width: min(1180px, 100%);
+    margin-inline: auto;
+}
+
+.open-one-install-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 58px;
+    padding: 0 2px 20px;
+}
+
+.open-one-install-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #10221f;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.open-one-install-brand img {
+    border-radius: 8px;
+}
+
+.open-one-install-org-logo {
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+    background: #fff;
+    padding: 4px;
+}
+
+.open-one-install-workspace {
+    color: #5f716d;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.open-one-install-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+    min-height: 560px;
+    overflow: hidden;
+    border: 1px solid #173831;
+    border-radius: 8px;
+    background: #0d2a25;
+    box-shadow: 0 28px 60px -40px rgba(16, 34, 31, 0.8);
+}
+
+.open-one-install-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 64px;
+    color: #eff9f5;
+}
+
+.open-one-install-overline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #8fe3c2;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.open-one-install-copy h1 {
+    margin: 22px 0 0;
+    max-width: 560px;
+    color: #fffdf6;
+    font-size: 48px;
+    line-height: 1.08;
+    font-weight: 700;
+}
+
+.open-one-install-copy > p {
+    max-width: 480px;
+    margin: 22px 0 0;
+    color: #b9d0c8;
+    font-size: 16px;
+    line-height: 1.7;
+}
+
+.open-one-install-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 32px;
+}
+
+.open-one-install-primary,
+.open-one-install-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 46px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.open-one-install-primary {
+    background: #dff7e9;
+    color: #12342b;
+}
+
+.open-one-install-primary:hover {
+    transform: translateY(-1px);
+    background: #fff3c7;
+}
+
+.open-one-install-secondary {
+    background: transparent;
+    border-color: rgba(222, 244, 236, 0.3);
+    color: #eff9f5;
+    cursor: pointer;
+}
+
+.open-one-install-secondary:hover {
+    border-color: rgba(222, 244, 236, 0.7);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.open-one-install-platform-note {
+    margin: 18px 0 0;
+    color: #8db2a5;
+    font-size: 12px;
+}
+
+.open-one-install-platforms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    margin-top: 9px;
+}
+
+.open-one-install-platforms a,
+.open-one-install-status a {
+    color: #d9eeb7;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.open-one-install-preview {
+    position: relative;
+    align-self: stretch;
+    overflow: hidden;
+    border-left: 1px solid rgba(226, 247, 238, 0.22);
+    background: #c8d7d2;
+}
+
+.open-one-install-preview-bar {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 15px;
+    background: rgba(8, 32, 27, 0.9);
+    color: #cfe1db;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.open-one-install-preview-bar span:last-child {
+    margin-left: auto;
+    color: #8fe3c2;
+}
+
+.open-one-install-preview-led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ffd56b;
+}
+
+.open-one-install-preview-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top left;
+    transform: scale(1.02);
+}
+
+.open-one-install-details {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 18px;
+    border-top: 1px solid #c5d3cf;
+    border-bottom: 1px solid #c5d3cf;
+}
+
+.open-one-install-details > div {
+    min-height: 170px;
+    padding: 28px 26px;
+    border-left: 1px solid #c5d3cf;
+}
+
+.open-one-install-details > div:first-child {
+    border-left: 0;
+}
+
+.open-one-install-details svg {
+    color: #0a7465;
+}
+
+.open-one-install-details h2 {
+    margin: 18px 0 0;
+    font-size: 17px;
+    line-height: 1.25;
+}
+
+.open-one-install-details p {
+    margin: 10px 0 0;
+    color: #5f716d;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.open-one-install-status,
+.open-one-install-mobile-note {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    align-items: start;
+    width: 100%;
+    max-width: 480px;
+    margin-top: 22px;
+    border: 1px solid rgba(219, 245, 233, 0.26);
+    border-radius: 8px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #eaf9f1;
+    font-size: 13px;
+}
+
+.open-one-install-status strong,
+.open-one-install-mobile-note strong {
+    font-size: 14px;
+}
+
+.open-one-install-status > span,
+.open-one-install-mobile-note > div > span {
+    color: #acd0c2;
+    line-height: 1.5;
+}
+
+.open-one-install-status a {
+    grid-column: 2;
+    margin-top: 4px;
+}
+
+.open-one-install-spinner,
+.open-one-install-loading-mark {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(223, 247, 233, 0.34);
+    border-top-color: #dff7e9;
+    border-radius: 50%;
+    animation: open-one-install-spin 0.8s linear infinite;
+}
+
+.open-one-install-mobile-note .open-one-install-secondary {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: 10px;
+}
+
+.open-one-install-loading {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    padding: 40px 24px;
+    text-align: center;
+}
+
+.open-one-install-loading-mark {
+    width: 28px;
+    height: 28px;
+    border-color: rgba(10, 116, 101, 0.18);
+    border-top-color: #0a7465;
+}
+
+.open-one-install-loading h1 {
+    margin: 0;
+    font-size: 28px;
+}
+
+.open-one-install-loading p:not(.open-one-install-kicker) {
+    margin: 0;
+    color: #5f716d;
+}
+
+.open-one-install-kicker {
+    margin: 0;
+    color: #0a7465;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+@keyframes open-one-install-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 860px) {
+    .open-one-install-page { padding: 16px; }
+    .open-one-install-hero { grid-template-columns: 1fr; }
+    .open-one-install-copy { padding: 42px 30px; }
+    .open-one-install-copy h1 { font-size: 38px; }
+    .open-one-install-preview { min-height: 330px; border-top: 1px solid rgba(226, 247, 238, 0.22); border-left: 0; }
+}
+
+@media (max-width: 620px) {
+    .open-one-install-nav { padding-bottom: 16px; }
+    .open-one-install-workspace { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .open-one-install-copy { padding: 36px 24px; }
+    .open-one-install-copy h1 { font-size: 32px; }
+    .open-one-install-copy > p { font-size: 15px; }
+    .open-one-install-details { grid-template-columns: 1fr; }
+    .open-one-install-details > div { min-height: 0; border-top: 1px solid #c5d3cf; border-left: 0; }
+    .open-one-install-details > div:first-child { border-top: 0; }
+    .open-one-install-preview { min-height: 260px; }
+    .open-one-install-preview-bar span:last-child { display: none; }
+}
+
 .ow-shell {
     position: relative;
     min-height: 100vh;

@@ -424,6 +424,9 @@ export type ModelOption = {
   behaviorDescription: string;
   behaviorValue: string | null;
   behaviorOptions?: ModelBehaviorOption[];
+  contextWindow?: number;
+  outputLimit?: number;
+  supportsReasoning?: boolean;
   disabled?: boolean;
   isFree: boolean;
   isConnected: boolean;

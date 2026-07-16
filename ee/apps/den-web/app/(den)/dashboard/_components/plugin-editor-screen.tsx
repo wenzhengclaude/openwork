@@ -436,7 +436,7 @@ export function PluginEditorScreen() {
 
       <h1 className="text-[28px] font-semibold text-gray-900">Create a plugin</h1>
       <p className="mt-1 text-[15px] text-gray-500">
-        Bundle skills, commands, and MCP servers your team can install in OpenWork with one click.
+        Bundle skills, commands, and MCP servers your team can install in Open One with one click.
       </p>
 
       <div className="mt-8 rounded-[24px] border border-gray-200 bg-white p-6">
@@ -775,7 +775,7 @@ export function PluginEditorScreen() {
             ))}
           </DenSelect>
           <p className="mt-1.5 text-[13px] text-gray-500">
-            Publishing puts the plugin in the marketplace so members find it in the OpenWork app.
+            Publishing puts the plugin in the marketplace so members find it in the Open One app.
           </p>
         </div>
       </div>

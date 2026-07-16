@@ -105,6 +105,7 @@ import {
 import { firstLineLocalFileParts } from "@/react-app/domains/session/sync/prompt-file-parts";
 import { useSessionInteractions } from "@/react-app/domains/session/sync/use-session-interactions";
 import { useModelBehavior } from "@/react-app/domains/session/surface/use-model-behavior";
+import { resolveCompanyLocalReasoningEffort } from "@/react-app/domains/settings/company-local-provider";
 import { useSessionFindStore } from "@/react-app/domains/session/surface/find-store";
 import { useModelPicker } from "@/react-app/domains/session/modals/use-model-picker";
 import { appMentionInstruction } from "@/react-app/domains/session/surface/composer/app-mentions";
@@ -614,7 +615,7 @@ export function SessionRoute() {
     baseUrl: opencodeBaseUrl,
     directory: selectedWorkspaceRoot || undefined,
   });
-  const { providerCatalog, modelVariantLabel, modelBehaviorOptions, modelVariantValue } =
+  const { providerCatalog, modelVariantLabel, modelBehaviorOptions, modelVariantValue, modelContextWindow } =
     useModelBehavior({
       providerList: providerListQuery.data,
       defaultModel: local.prefs.defaultModel,
@@ -918,12 +919,20 @@ export function SessionRoute() {
           cacheKey: targetSessionId,
           runtimeKey: environmentRuntimeKey,
         });
+        const selectedModel = local.prefs.defaultModel;
+        const companyReasoningEffort = selectedModel
+          ? resolveCompanyLocalReasoningEffort(selectedModel.providerID, selectedModel.modelID, modelVariantValue)
+          : undefined;
         const result = await opencodeClient.session.promptAsync({
           sessionID: targetSessionId,
           parts,
-          model: local.prefs.defaultModel ?? undefined,
+          model: selectedModel ?? undefined,
           agent: selectedAgent ?? undefined,
-          ...(modelVariantValue ? { variant: modelVariantValue } : {}),
+          ...(companyReasoningEffort
+            ? { reasoning_effort: companyReasoningEffort }
+            : modelVariantValue
+              ? { variant: modelVariantValue }
+              : {}),
           ...(envSystemContext ? { system: envSystemContext } : {}),
         });
         if (result.error) {
@@ -938,6 +947,7 @@ export function SessionRoute() {
       modelVariantLabel,
       modelVariant: modelVariantValue,
       modelBehaviorOptions,
+      modelContextWindow,
       onModelVariantChange: (value: string | null) => {
         local.setPrefs((previous) => ({ ...previous, modelVariant: value }));
       },
@@ -1025,6 +1035,7 @@ export function SessionRoute() {
     listAgents,
     listSlashCommands,
     modelBehaviorOptions,
+    modelContextWindow,
     modelLabel,
     modelVariantLabel,
     modelVariantValue,

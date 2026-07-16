@@ -33,6 +33,7 @@ import { addOpencodeCacheHint, safeStringify } from "../../../../app/utils";
 import { clearSessionDraft, saveSessionDraft } from "./draft-store";
 import { firstLineLocalFileParts } from "./prompt-file-parts";
 import { appMentionInstruction } from "../surface/composer/app-mentions";
+import { resolveCompanyLocalReasoningEffort } from "../../settings/company-local-provider";
 
 type SessionModelConfig = {
   applyPendingSessionChoice: (sessionId: string) => void;
@@ -561,7 +562,8 @@ export function createSessionActionsStore(options: {
       const agent = selectedSessionAgent();
       const parts = await buildPromptParts(resolvedDraft);
       const selectedVariant = options.sanitizeModelVariantForRef(model, options.modelVariant()) ?? undefined;
-      const reasoningEffort = options.resolveCodexReasoningEffort(model.modelID, selectedVariant ?? null);
+      const reasoningEffort = options.resolveCodexReasoningEffort(model.modelID, selectedVariant ?? null)
+        ?? resolveCompanyLocalReasoningEffort(model.providerID, model.modelID, selectedVariant ?? null);
       const requestVariant = reasoningEffort ? undefined : selectedVariant;
       const promptOverrides = reasoningEffort ? ({ reasoning_effort: reasoningEffort } as const) : undefined;
 

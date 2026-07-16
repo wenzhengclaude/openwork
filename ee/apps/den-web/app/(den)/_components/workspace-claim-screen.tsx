@@ -15,7 +15,7 @@ function LoadingCard({ title, body }: { title: string; body: string }) {
   return (
     <section className="den-page py-4 lg:py-6">
       <div className="den-frame grid max-w-[44rem] gap-4 p-6 md:p-7">
-        <p className="den-eyebrow">OpenWork Cloud</p>
+        <p className="den-eyebrow">Open One Cloud</p>
         <div className="grid gap-2">
           <h1 className="den-title-lg">{title}</h1>
           <p className="den-copy">{body}</p>
@@ -204,7 +204,7 @@ export function WorkspaceClaimScreen({
 
       window.location.assign(openworkUrl);
     } catch (error) {
-      setHandoffError(error instanceof Error ? error.message : "Could not open OpenWork.");
+      setHandoffError(error instanceof Error ? error.message : "Could not open Open One.");
     } finally {
       setHandoffBusy(false);
     }
@@ -219,13 +219,13 @@ export function WorkspaceClaimScreen({
       <section className="den-page py-4 lg:py-6">
         <div className="den-frame grid max-w-[44rem] gap-6 p-6 md:p-8">
           <div className="grid gap-2">
-            <p className="den-eyebrow">OpenWork Cloud</p>
+            <p className="den-eyebrow">Open One Cloud</p>
             <h1 className="den-title-lg">This claim link can&apos;t be opened.</h1>
             <p className="den-copy">The link is missing its claim token. Re-open the link from your setup, or ask for a new one.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/" className="den-button-primary w-full sm:w-auto">
-              Back to OpenWork Cloud
+              Back to Open One Cloud
             </Link>
           </div>
         </div>
@@ -243,7 +243,7 @@ export function WorkspaceClaimScreen({
       <section className="den-page grid gap-6 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:py-6">
         <div className="den-frame grid gap-6 p-6 md:p-8">
           <div className="grid gap-3">
-            <p className="den-eyebrow">OpenWork Cloud</p>
+            <p className="den-eyebrow">Open One Cloud</p>
             <div className="grid gap-2">
               <p className="den-copy">Claim the workspace OpenWork set up for you</p>
               <h1 className="den-title-xl max-w-[14ch]">Take ownership</h1>
@@ -289,7 +289,7 @@ export function WorkspaceClaimScreen({
       <section className="den-page py-4 lg:py-6">
         <div className="den-frame grid max-w-[44rem] gap-6 p-6 md:p-8">
           <div className="grid gap-2">
-            <p className="den-eyebrow">OpenWork Cloud</p>
+            <p className="den-eyebrow">Open One Cloud</p>
             <h1 className="den-title-xl max-w-[16ch]">You own {claimedOrg.organizationName} now.</h1>
             <p className="den-copy">
               If OpenWork is already open on this machine, sign it in automatically - no password to type again.
@@ -303,7 +303,7 @@ export function WorkspaceClaimScreen({
               onClick={() => void handleOpenDesktop()}
               disabled={handoffBusy}
             >
-              {handoffBusy ? "Opening OpenWork..." : "Open OpenWork"}
+              {handoffBusy ? "Opening Open One..." : "Open Open One"}
             </button>
             <button
               type="button"
@@ -331,7 +331,7 @@ export function WorkspaceClaimScreen({
     <section className="den-page py-4 lg:py-6">
       <div className="den-frame grid max-w-[44rem] gap-6 p-6 md:p-8">
         <div className="grid gap-3">
-          <p className="den-eyebrow">OpenWork Cloud</p>
+          <p className="den-eyebrow">Open One Cloud</p>
           <div className="grid gap-2">
             <p className="den-copy">Claim the workspace OpenWork set up for you</p>
             <h1 className="den-title-xl max-w-[14ch]">Take ownership</h1>

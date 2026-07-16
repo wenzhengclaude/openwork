@@ -95,7 +95,7 @@ export function JoinOrgSuccess({ organizationName, onContinueInBrowser }: JoinOr
     try {
       window.location.assign(await createDesktopHandoff());
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Could not open OpenWork.");
+      setActionError(error instanceof Error ? error.message : "Could not open Open One.");
     } finally {
       setHandoffBusy(false);
     }
@@ -142,7 +142,7 @@ export function JoinOrgSuccess({ organizationName, onContinueInBrowser }: JoinOr
     <section className="den-page py-4 lg:py-6" data-testid="join-org-success">
       <div className="den-frame grid max-w-[48rem] gap-6 p-6 md:p-8">
         <div className="grid gap-2">
-          <p className="den-eyebrow">OpenWork Cloud</p>
+          <p className="den-eyebrow">Open One Cloud</p>
           <h1 className="den-title-xl max-w-[16ch]">You&apos;re in, welcome to {organizationName}</h1>
           <p className="den-copy">The desktop app is where OpenWork runs on your computer and puts your team&apos;s setup to work.</p>
         </div>
@@ -187,7 +187,7 @@ export function JoinOrgSuccess({ organizationName, onContinueInBrowser }: JoinOr
                 disabled={handoffBusy}
                 data-testid="join-org-open-openwork"
               >
-                {handoffBusy ? "Opening OpenWork..." : "Open OpenWork"}
+                {handoffBusy ? "Opening Open One..." : "Open Open One"}
               </button>
               <a
                 href={OPENWORK_DOWNLOAD_URL}

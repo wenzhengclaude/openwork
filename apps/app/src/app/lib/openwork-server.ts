@@ -38,6 +38,19 @@ export type OpenworkServerCapabilities = {
 
 export type OpenworkServerStatus = "connected" | "disconnected" | "limited";
 
+export type OpenAiCompatibleProviderModel = {
+  id: string;
+  name: string;
+  contextWindow?: number;
+  outputLimit?: number;
+  reasoning?: boolean;
+};
+
+export type OpenAiCompatibleProviderModelsResult = {
+  baseUrl: string;
+  models: OpenAiCompatibleProviderModel[];
+};
+
 export type OpenworkServerDiagnostics = {
   ok: boolean;
   version: string;
@@ -1035,6 +1048,14 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       requestJson<OpenworkRuntimeSnapshot>(baseUrl, "/runtime/versions", { token, hostToken, timeoutMs: timeouts.status }),
     status: () => requestJson<OpenworkServerDiagnostics>(baseUrl, "/status", { token, hostToken, timeoutMs: timeouts.status }),
     capabilities: () => requestJson<OpenworkServerCapabilities>(baseUrl, "/capabilities", { token, hostToken, timeoutMs: timeouts.capabilities }),
+    probeOpenAiCompatibleModels: (payload: { baseUrl: string; apiKey: string }) =>
+      requestJson<OpenAiCompatibleProviderModelsResult>(baseUrl, "/providers/openai-compatible/models", {
+        token,
+        hostToken,
+        method: "POST",
+        body: payload,
+        timeoutMs: 15_000,
+      }),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),
     setConnectState: (connectEnabled: boolean) => requestJson<OpenworkConnectState>(baseUrl, "/experimental/connect/state", { token, hostToken, method: "PUT", body: { connectEnabled }, timeoutMs: timeouts.config }),
     googleWorkspaceConnectStart: (options?: { gmailRead?: boolean; features?: string[] }) => requestJson<GoogleWorkspaceConnectStart>(baseUrl, "/experimental/google-workspace/connect/start", { token, hostToken, method: "POST", body: { gmailRead: options?.gmailRead === true, features: options?.features ?? [] }, timeoutMs: timeouts.status }),

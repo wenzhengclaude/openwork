@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#123047" />
-    <title>Open One | Windows 下载</title>
+    <meta name="theme-color" content="#101c25" />
+    <title>Open One | 团队智能体工作台</title>
     <link rel="icon" href="/assets/open-one-mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -14,47 +14,101 @@
         <img src="/assets/open-one-mark.svg" alt="" />
         <span>Open One</span>
       </a>
-      <a class="control-link" href="http://10.10.16.164:13005">组织控制台</a>
+      <div class="header-actions">
+        <span class="release-status"><i aria-hidden="true"></i>内部发布通道</span>
+        <a href="http://10.10.16.164:13005">组织控制台</a>
+      </div>
     </header>
 
     <main>
-      <section class="hero">
+      <section class="hero" aria-labelledby="open-one-title">
         <div class="hero-copy">
-          <p class="eyebrow">TEAM AGENT DESKTOP</p>
-          <h1>Open One</h1>
-          <p class="lead">面向团队的智能体工作台。连接模型、技能、MCP 与组织配置，在一个桌面应用中完成日常任务。</p>
+          <p class="eyebrow">OPEN ONE DESKTOP</p>
+          <h1 id="open-one-title">让智能体成为团队的日常工作方式。</h1>
+          <p class="lead">
+            Open One 将企业模型、Skill、MCP 与本地工作区带到同一个桌面应用中，让每位成员都能安全地完成复杂任务。
+          </p>
           <div class="download-actions">
-            <a class="download-button" href="/Open-One-Setup.exe">下载 Windows 版</a>
-            <span>Windows 10/11 · 64 位</span>
+            <a class="download-button" href="/Open-One-Setup.exe">
+              <img src="/assets/icons/download.svg" alt="" />
+              下载 Windows 版
+            </a>
+            <a class="text-button" href="http://10.10.16.164:13005">打开组织控制台 <img src="/assets/icons/arrow.svg" alt="" /></a>
+          </div>
+          <div class="hero-meta" aria-label="桌面端能力">
+            <span><i></i>Windows 10/11 · 64 位</span>
+            <span>应用内稳定更新</span>
           </div>
         </div>
-        <div class="product-frame" aria-label="Open One 桌面应用预览">
-          <img src="/assets/open-one-desktop.png" alt="Open One 桌面应用界面" />
+
+        <div class="hero-visual" aria-label="Open One 桌面应用预览">
+          <div class="visual-topline">
+            <span class="visual-live"><i></i>工作区已就绪</span>
+            <span>OPEN ONE / DESKTOP</span>
+          </div>
+          <div class="product-frame">
+            <img src="/assets/open-one-desktop.png" alt="Open One 桌面应用界面" />
+          </div>
+          <div class="signal-layer" aria-hidden="true">
+            <span class="signal-line signal-line-one"></span>
+            <span class="signal-line signal-line-two"></span>
+            <div class="signal-chip signal-chip-agent">
+              <img src="/assets/icons/agent.svg" alt="" />
+              <span>智能体</span>
+              <b>运行中</b>
+            </div>
+            <div class="signal-chip signal-chip-model">
+              <img src="/assets/icons/model.svg" alt="" />
+              <span>企业模型</span>
+              <b>已连接</b>
+            </div>
+            <div class="signal-chip signal-chip-flow">
+              <img src="/assets/icons/workflow.svg" alt="" />
+              <span>团队工作流</span>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="capabilities" id="getting-started" aria-label="产品能力">
+      <section class="capabilities" aria-label="Open One 能力">
         <article>
-          <span class="number">01</span>
-          <h2>本地任务</h2>
-          <p>在本机工作区中运行 OpenCode 智能体，保留文件、终端和权限控制。</p>
+          <span class="capability-icon capability-icon-green"><img src="/assets/icons/workflow.svg" alt="" /></span>
+          <div>
+            <span class="number">01</span>
+            <h2>统一的团队工作流</h2>
+            <p>把模型、工具和可复用技能集中管理，并按组织策略分发给成员。</p>
+          </div>
         </article>
         <article>
-          <span class="number">02</span>
-          <h2>团队配置</h2>
-          <p>通过组织控制台统一管理成员、模型、MCP、技能和桌面策略。</p>
+          <span class="capability-icon capability-icon-blue"><img src="/assets/icons/model.svg" alt="" /></span>
+          <div>
+            <span class="number">02</span>
+            <h2>接入企业模型</h2>
+            <p>支持公司 OpenAI 兼容接口，每个账号仅显示自己被授权的模型。</p>
+          </div>
         </article>
         <article>
-          <span class="number">03</span>
-          <h2>自带模型</h2>
-          <p>可接入公司现有的 OpenAI 兼容接口和其他已支持的提供商。</p>
+          <span class="capability-icon capability-icon-gold"><img src="/assets/icons/shield.svg" alt="" /></span>
+          <div>
+            <span class="number">03</span>
+            <h2>可控的桌面发布</h2>
+            <p>通过稳定发布通道统一升级，兼顾本地文件权限与团队级配置。</p>
+          </div>
         </article>
+      </section>
+
+      <section class="release-band" aria-label="下载 Open One">
+        <div>
+          <p class="eyebrow">READY FOR YOUR TEAM</p>
+          <h2>下载后即可进入你的组织工作区。</h2>
+        </div>
+        <a class="release-download" href="/Open-One-Setup.exe">获取 Windows 安装包 <img src="/assets/icons/arrow.svg" alt="" /></a>
       </section>
     </main>
 
     <footer>
       <span>Open One · Internal distribution</span>
-      <a href="http://10.10.16.164:13005">打开组织控制台</a>
+      <span>Windows desktop release channel</span>
     </footer>
   </body>
 </html>

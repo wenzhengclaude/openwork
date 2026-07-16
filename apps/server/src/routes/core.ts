@@ -7,6 +7,7 @@ import {
 } from "../connect-state.js";
 import { EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey, type EnvService } from "../env-file.js";
 import { ApiError } from "../errors.js";
+import { probeOpenAiCompatibleModels } from "../openai-compatible-provider.js";
 import {
   createGoogleWorkspaceConnectFlowManager,
   googleWorkspaceDisconnect,
@@ -94,6 +95,13 @@ export function registerCoreRoutes(options: RegisterCoreRoutesOptions): void {
   addRoute(routes, "GET", "/health", "none", async () => healthResponse());
 
   addRoute(routes, "GET", "/w/:id/health", "none", async () => healthResponse());
+
+  addRoute(routes, "POST", "/providers/openai-compatible/models", "host", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const baseUrl = typeof body.baseUrl === "string" ? body.baseUrl : "";
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey : "";
+    return jsonResponse(await probeOpenAiCompatibleModels({ baseUrl, apiKey }));
+  });
 
   // Dev log sink: append browser console + error events to a file that an
   // operator (or an AI driver) can tail. Unauth on purpose because this is

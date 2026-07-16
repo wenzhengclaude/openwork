@@ -983,7 +983,7 @@ function GoogleWorkspaceDialog({
                 OpenWork keeps the saved Google client ID and secret when you save permission changes. Replace them only if you are rotating credentials.
               </p>
               <div className="mt-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-[12px] text-gray-800">
-                Saved client ID: <span className="font-mono">{savedClientId ?? "stored in OpenWork"}</span>
+                Saved client ID: <span className="font-mono">{savedClientId ?? "stored in Open One"}</span>
               </div>
               <DenButton className="mt-3" variant="secondary" size="sm" onClick={startReplacingCredentials} disabled={submitting}>
                 Replace credentials

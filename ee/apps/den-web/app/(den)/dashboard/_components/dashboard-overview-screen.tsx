@@ -95,7 +95,7 @@ export function DashboardOverviewScreen() {
 
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2.5 border-b border-[#e7e9f0] pb-3">
-        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[#07192C]">{activeOrg?.name ?? "OpenWork Cloud"}</span>
+        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[#07192C]">{activeOrg?.name ?? "Open One Cloud"}</span>
         <ChevronRight className="h-3.5 w-3.5 text-[#9AA5BA]" />
         <span className="text-[14px] font-medium tracking-[-0.01em] text-[#5A6886]">Dashboard</span>
       </div>
@@ -115,7 +115,7 @@ export function DashboardOverviewScreen() {
 
       {/* Live org data */}
       <div className="mt-5 grid gap-3.5 md:grid-cols-2">
-        <StatCard icon={<Users className="h-5 w-5 text-[#6F3DFF]" />} title="OpenWork users" value={`${members}`} sub="Current workspace members" tone="violet" />
+        <StatCard icon={<Users className="h-5 w-5 text-[#6F3DFF]" />} title="Open One users" value={`${members}`} sub="Current workspace members" tone="violet" />
         <StatCard icon={<Gauge className="h-5 w-5 text-[#1D63FF]" />} title="Pending invites" value={`${pending}`} sub="Awaiting activation" tone="blue" />
       </div>
     </div>

@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowRight, Check, Clipboard, Download, Laptop, PackageCheck, ShieldCheck, Sparkles } from "lucide-react";
 import { getErrorMessage, requestJson } from "../_lib/den-flow";
 import { buildInstallDownloadHref, type InstallPlatform } from "../_lib/install-download";
 import { isMobileUserAgent } from "../_lib/platform";
@@ -83,6 +85,10 @@ function detectPlatform(): InstallPlatform {
 
 function installHref(config: InstallConfig, platform: InstallPlatform, token: string) {
   return buildInstallDownloadHref(config.apiUrl, platform, token);
+}
+
+function platformShortLabel(platform: InstallPlatform): string {
+  return platform === "win-x64" ? "Windows" : platform.startsWith("mac") ? "macOS" : "Linux";
 }
 
 export function InstallScreen() {
@@ -180,11 +186,12 @@ export function InstallScreen() {
 
   if (busy) {
     return (
-      <section className="den-page grid min-h-dvh place-items-center py-4 lg:py-6" data-testid="install-page">
-        <div className="den-frame grid w-full max-w-[44rem] gap-4 p-6 md:p-8">
-          <p className="den-eyebrow">OpenWork Desktop</p>
-          <h1 className="den-title-lg">Loading your install link.</h1>
-          <p className="den-copy">Checking your team's OpenWork setup...</p>
+      <section className="open-one-install-page grid min-h-dvh place-items-center" data-testid="install-page">
+        <div className="open-one-install-loading">
+          <span className="open-one-install-loading-mark" aria-hidden="true" />
+          <p className="open-one-install-kicker">OPEN ONE DESKTOP</p>
+          <h1>正在准备你的安装包</h1>
+          <p>正在读取工作区和设备配置。</p>
         </div>
       </section>
     );
@@ -192,13 +199,11 @@ export function InstallScreen() {
 
   if (!config) {
     return (
-      <section className="den-page grid min-h-dvh place-items-center py-4 lg:py-6" data-testid="install-page">
-        <div className="den-frame grid w-full max-w-[44rem] gap-6 p-6 md:p-8">
-          <div className="grid gap-2">
-            <p className="den-eyebrow">OpenWork Desktop</p>
-            <h1 className="den-title-lg">This install link can't be opened.</h1>
-            <p className="den-copy">{error ?? "Ask your workspace admin for a fresh install link."}</p>
-          </div>
+      <section className="open-one-install-page grid min-h-dvh place-items-center" data-testid="install-page">
+        <div className="open-one-install-loading">
+          <p className="open-one-install-kicker">OPEN ONE DESKTOP</p>
+          <h1>安装链接不可用</h1>
+          <p>{error ?? "请向工作区管理员获取新的安装链接。"}</p>
         </div>
       </section>
     );
@@ -206,64 +211,108 @@ export function InstallScreen() {
 
   const primaryHref = installHref(config, platform, token);
   const primaryLabel = platformOptions.find((option) => option.value === platform)?.label ?? "your computer";
+  const productName = config.appName || "Open One";
 
   return (
-    <section className="den-page grid min-h-dvh place-items-center py-4 lg:py-6" data-testid="install-page">
-      <div className="den-frame grid w-full max-w-[44rem] gap-6 p-6 text-center md:p-8" data-testid="install-card">
-        <div className="grid justify-items-center gap-3">
-          <p className="den-eyebrow">{config.appName} Desktop</p>
+    <section className="open-one-install-page" data-testid="install-page">
+      <header className="open-one-install-nav">
+        <div className="open-one-install-brand">
           {config.logoUrl ? (
             // Organization logos may be served by private on-prem hosts that
             // are intentionally absent from this deployment's image allowlist.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={config.logoUrl} alt={`${config.clientName} wordmark`} className="max-h-16 max-w-64 object-contain object-center" />
+            <img src={config.logoUrl} alt={`${config.clientName} logo`} className="open-one-install-org-logo" />
+          ) : (
+            <Image src="/open-one-mark.svg" alt="Open One" width={38} height={38} priority />
+          )}
+          <span>{productName}</span>
+        </div>
+        <span className="open-one-install-workspace">{config.clientName}</span>
+      </header>
+
+      <main className="open-one-install-hero" data-testid="install-card">
+        <div className="open-one-install-copy">
+          <div className="open-one-install-overline"><Sparkles size={14} /> WORKSPACE DESKTOP</div>
+          <h1>为 {config.clientName} 准备好的<br />{productName}。</h1>
+          <p>一次安装，即可进入你的团队工作区、模型连接和共享能力。安装包已包含当前组织的登录与工作区配置。</p>
+
+          {isMobile ? (
+            <div className="open-one-install-mobile-note" data-testid="install-mobile-note">
+              <Laptop size={20} aria-hidden="true" />
+              <div>
+                <strong>请在电脑上完成安装</strong>
+                <span>将此链接发送到 Windows、macOS 或 Linux 设备。</span>
+              </div>
+              <button type="button" className="open-one-install-secondary" onClick={() => void copyCurrentLink()}>
+                <Clipboard size={16} /> {copied ? "已复制" : "复制安装链接"}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="open-one-install-actions">
+                <a className="open-one-install-primary" href={primaryHref} data-testid="install-download-primary" onClick={() => beginDownload(primaryLabel, primaryHref)}>
+                  <Download size={18} /> 下载 {primaryLabel} <ArrowRight size={17} />
+                </a>
+                <button type="button" className="open-one-install-secondary" onClick={() => void copyCurrentLink()}>
+                  <Clipboard size={16} /> {copied ? "链接已复制" : "复制链接"}
+                </button>
+              </div>
+              <p className="open-one-install-platform-note">已检测到 {platformShortLabel(platform)}。需要其他设备？</p>
+              <div className="open-one-install-platforms">
+                {secondaryPlatforms.map((option) => (
+                  <a key={option.value} href={installHref(config, option.value, token)} onClick={() => beginDownload(option.label, installHref(config, option.value, token))}>
+                    {option.label}
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+
+          {downloadState !== "idle" ? (
+            <div className="open-one-install-status" aria-live="polite" data-testid="install-download-status">
+              {downloadState === "preparing" ? (
+                <><span className="open-one-install-spinner" aria-hidden="true" /><strong>正在准备 {downloadLabel} 安装包</strong><span>首次下载可能需要一分钟，请保持此页面打开。</span></>
+              ) : (
+                <><Check size={18} aria-hidden="true" /><strong>下载已开始</strong><span>若浏览器没有出现下载，请再次尝试。</span><a href={downloadHref} onClick={() => beginDownload(downloadLabel, downloadHref)}>重新下载</a></>
+              )}
+            </div>
           ) : null}
-          <h1 className="den-title-xl">Download {config.appName} for {config.clientName}</h1>
-          <p className="den-copy">Mac and Windows downloads include the standard OpenWork installer and your team's setup file in one ZIP. Keep them together, run the installer, then sign in.</p>
         </div>
 
-        {isMobile ? (
-          <div className="den-frame-inset grid gap-3 rounded-[1.5rem] p-5" data-testid="install-mobile-note">
-            <p className="m-0 text-base font-medium text-[var(--dls-text-primary)]">{config.appName} runs on your computer.</p>
-            <p className="den-copy">Open this link on your Mac, Windows, or Linux machine. You can also copy it and send it to yourself.</p>
-            <button type="button" className="den-button-secondary w-full sm:w-auto" onClick={() => void copyCurrentLink()}>
-              {copied ? "Copied" : "Copy install link"}
-            </button>
+        <div className="open-one-install-preview" aria-label={`${productName} desktop application preview`}>
+          <div className="open-one-install-preview-bar">
+            <span className="open-one-install-preview-led" />
+            <span>OPEN ONE DESKTOP</span>
+            <span>READY FOR {config.clientName.toUpperCase()}</span>
           </div>
-        ) : (
-          <div className="grid justify-items-center gap-4">
-            <a className="den-button-primary w-full justify-center sm:w-auto" href={primaryHref} data-testid="install-download-primary" onClick={() => beginDownload(primaryLabel, primaryHref)}>
-              Download for {primaryLabel}
-            </a>
-            <div className="flex flex-wrap justify-center gap-2">
-              {secondaryPlatforms.map((option) => (
-                <a key={option.value} className="den-button-secondary" href={installHref(config, option.value, token)} onClick={() => beginDownload(option.label, installHref(config, option.value, token))}>
-                  {option.label}
-                </a>
-              ))}
-            </div>
-            {downloadState !== "idle" ? (
-              <div className="den-frame-inset grid w-full justify-items-center gap-2 rounded-[1.25rem] p-4" aria-live="polite" data-testid="install-download-status">
-                {downloadState === "preparing" ? (
-                  <>
-                    <span className="size-5 animate-spin rounded-full border-2 border-[var(--dls-border-strong)] border-t-[var(--dls-accent)]" aria-hidden="true" />
-                    <p className="m-0 font-medium text-[var(--dls-text-primary)]">Preparing your {downloadLabel} download...</p>
-                    <p className="den-copy">The first download may take up to a minute. Your browser will begin downloading when it is ready.</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="m-0 font-medium text-[var(--dls-text-primary)]">Download started</p>
-                    <p className="den-copy">Your browser is preparing the file. If it does not appear, try the download again.</p>
-                    <a className="den-button-secondary" href={downloadHref} onClick={() => beginDownload(downloadLabel, downloadHref)}>
-                      Try again
-                    </a>
-                  </>
-                )}
-              </div>
-            ) : null}
-          </div>
-        )}
-      </div>
+          <Image
+            src="/open-one-desktop-preview.png"
+            alt="Open One desktop workspace"
+            width={1428}
+            height={1016}
+            priority
+            className="open-one-install-preview-image"
+          />
+        </div>
+      </main>
+
+      <section className="open-one-install-details" aria-label="Installation details">
+        <div>
+          <PackageCheck size={20} aria-hidden="true" />
+          <h2>已为组织预配置</h2>
+          <p>下载后直接进入 {config.clientName} 的 Open One 工作区，无需手动寻找服务器地址。</p>
+        </div>
+        <div>
+          <ShieldCheck size={20} aria-hidden="true" />
+          <h2>账户与设备分离</h2>
+          <p>{config.requireSignin ? "首次打开需要使用组织账户登录。" : "当前工作区允许按组织策略继续配置。"}</p>
+        </div>
+        <div>
+          <Laptop size={20} aria-hidden="true" />
+          <h2>适用于桌面设备</h2>
+          <p>支持 Windows、macOS 和 Linux。每个安装包均保留标准更新和卸载能力。</p>
+        </div>
+      </section>
     </section>
   );
 }

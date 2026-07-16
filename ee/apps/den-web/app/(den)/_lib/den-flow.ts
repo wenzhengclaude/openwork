@@ -620,7 +620,7 @@ export function getWorkerRuntimeSnapshot(payload: unknown): WorkerRuntimeSnapsho
 export function getRuntimeServiceLabel(name: RuntimeServiceName): string {
   switch (name) {
     case "openwork-server":
-      return "OpenWork server";
+      return "Open One server";
     case "opencode":
       return "OpenCode";
   }

@@ -17,16 +17,17 @@ const defaultDevDataDir = resolve(
 const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const nodeCmd = process.execPath;
 const portValue = Number.parseInt(process.env.PORT ?? "", 10);
-const devPort = Number.isFinite(portValue) && portValue > 0 ? portValue : 5173;
+let devPort = Number.isFinite(portValue) && portValue > 0 ? portValue : 5173;
 const explicitStartUrl = process.env.OPENWORK_ELECTRON_START_URL?.trim() || "";
-const startUrl = explicitStartUrl || `http://localhost:${devPort}`;
-const viteProbeUrls = explicitStartUrl
+let startUrl = explicitStartUrl || `http://localhost:${devPort}`;
+let viteProbeUrls = explicitStartUrl
   ? [explicitStartUrl]
   : [
       `http://127.0.0.1:${devPort}`,
       `http://[::1]:${devPort}`,
       `http://localhost:${devPort}`,
     ];
+const openworkAppRoot = resolve(repoRoot, "apps", "app");
 
 function needsShell(command) {
   return process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
@@ -76,12 +77,12 @@ async function probeHost(host, port) {
   });
 }
 
-async function looksLikeVite(url) {
+async function looksLikeOpenWorkVite(url) {
   try {
-    const response = await fetchWithTimeout(`${url}/@vite/client`);
+    const response = await fetchWithTimeout(`${url}/__openwork_dev_server_id`);
     if (!response.ok) return false;
-    const body = await response.text();
-    return body.includes("@vite/client") || body.includes("import.meta.hot");
+    const body = await response.json();
+    return typeof body?.appRoot === "string" && body.appRoot === openworkAppRoot;
   } catch {
     return false;
   }
@@ -99,17 +100,30 @@ async function portIsOpenForVite(url) {
   }
 }
 
+async function findAvailableDevPort(startPort) {
+  for (let candidate = startPort; candidate < startPort + 20; candidate += 1) {
+    const [ipv4Open, ipv6Open] = await Promise.all([
+      probeHost("127.0.0.1", candidate),
+      probeHost("::1", candidate),
+    ]);
+    if (!ipv4Open && !ipv6Open) return candidate;
+  }
+  throw new Error(`No available Vite port found between ${startPort} and ${startPort + 19}`);
+}
+
 async function waitForVite(url, timeoutMs = 60_000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     for (const candidate of [url, ...viteProbeUrls].filter(Boolean)) {
-      if (await looksLikeVite(candidate)) {
+      if (await looksLikeOpenWorkVite(candidate)) {
         return candidate;
       }
     }
-    for (const candidate of [url, ...viteProbeUrls].filter(Boolean)) {
-      if (await portIsOpenForVite(candidate)) {
-        return candidate;
+    if (explicitStartUrl) {
+      for (const candidate of [url, ...viteProbeUrls].filter(Boolean)) {
+        if (await portIsOpenForVite(candidate)) {
+          return candidate;
+        }
       }
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
@@ -208,19 +222,22 @@ runSync(pnpmCmd, ["--filter", "openwork-server", "build"], { cwd: repoRoot });
 const initialProbeUrls = [startUrl, ...viteProbeUrls].filter(Boolean);
 let viteReady = false;
 for (const candidate of initialProbeUrls) {
-  if (await looksLikeVite(candidate)) {
+  if (await looksLikeOpenWorkVite(candidate)) {
     viteReady = true;
     break;
   }
 }
 
-if (!viteReady) {
-  for (const candidate of initialProbeUrls) {
-    if (await portIsOpenForVite(candidate)) {
-      viteReady = true;
-      break;
-    }
-  }
+if (!viteReady && !explicitStartUrl && (await portIsOpenForVite(startUrl))) {
+  const requestedPort = devPort;
+  devPort = await findAvailableDevPort(devPort + 1);
+  startUrl = `http://localhost:${devPort}`;
+  viteProbeUrls = [
+    `http://127.0.0.1:${devPort}`,
+    `http://[::1]:${devPort}`,
+    startUrl,
+  ];
+  console.log(`[electron-dev] Port ${requestedPort} belongs to another app; using ${devPort}.`);
 }
 
 if (!viteReady) {

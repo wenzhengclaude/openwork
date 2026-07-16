@@ -26,7 +26,7 @@ function LoadingCard({ title, body }: { title: string; body: string }) {
   return (
     <section className="den-page py-4 lg:py-6">
       <div className="den-frame grid max-w-[44rem] gap-4 p-6 md:p-7">
-        <p className="den-eyebrow">OpenWork Cloud</p>
+        <p className="den-eyebrow">Open One Cloud</p>
         <div className="grid gap-2">
           <h1 className="den-title-lg">{title}</h1>
           <p className="den-copy">{body}</p>
@@ -225,13 +225,13 @@ export function JoinOrgScreen({ invitationId }: { invitationId: string }) {
       <section className="den-page py-4 lg:py-6">
         <div className="den-frame grid max-w-[44rem] gap-6 p-6 md:p-8">
           <div className="grid gap-2">
-            <p className="den-eyebrow">OpenWork Cloud</p>
+            <p className="den-eyebrow">Open One Cloud</p>
             <h1 className="den-title-lg">This invite can't be opened.</h1>
             <p className="den-copy">{previewError ?? "This invite could not be loaded."}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/" className="den-button-primary w-full sm:w-auto">
-              Back to OpenWork Cloud
+              Back to Open One Cloud
             </Link>
           </div>
         </div>
@@ -244,7 +244,7 @@ export function JoinOrgScreen({ invitationId }: { invitationId: string }) {
       <section className="den-page py-4 lg:py-6">
         <div className="den-frame grid max-w-[44rem] gap-6 p-6 md:p-8">
           <div className="grid gap-2">
-            <p className="den-eyebrow">OpenWork Cloud</p>
+            <p className="den-eyebrow">Open One Cloud</p>
             <h1 className="den-title-lg">This invite needs a different email domain.</h1>
             <p className="den-copy">
               {preview.organization.name} now only accepts accounts from {allowedDomainsLabel}. Ask a workspace owner to update the allowlist or send a new invite.
@@ -252,7 +252,7 @@ export function JoinOrgScreen({ invitationId }: { invitationId: string }) {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/" className="den-button-primary w-full sm:w-auto">
-              Back to OpenWork Cloud
+              Back to Open One Cloud
             </Link>
           </div>
         </div>
@@ -265,7 +265,7 @@ export function JoinOrgScreen({ invitationId }: { invitationId: string }) {
       <section className="den-page grid gap-6 py-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] lg:py-6">
         <div className="den-frame grid gap-6 p-6 md:p-8">
           <div className="grid gap-3">
-            <p className="den-eyebrow">OpenWork Cloud</p>
+            <p className="den-eyebrow">Open One Cloud</p>
             <div className="grid gap-2">
               <p className="den-copy">You've been invited to</p>
               <h1 className="den-title-xl max-w-[12ch]">{preview.organization.name}</h1>
@@ -323,7 +323,7 @@ export function JoinOrgScreen({ invitationId }: { invitationId: string }) {
     <section className="den-page py-4 lg:py-6">
       <div className="den-frame grid max-w-[44rem] gap-6 p-6 md:p-8">
         <div className="grid gap-3">
-          <p className="den-eyebrow">OpenWork Cloud</p>
+          <p className="den-eyebrow">Open One Cloud</p>
           <div className="grid gap-2">
             <p className="den-copy">You've been invited to</p>
             <h1 className="den-title-xl max-w-[12ch]">{preview.organization.name}</h1>
@@ -350,7 +350,7 @@ export function JoinOrgScreen({ invitationId }: { invitationId: string }) {
                 href={user && invitedEmailMatches ? getOrgDashboardRoute(preview.organization.slug) : "/"}
                 className="den-button-primary w-full sm:w-auto"
               >
-                {user && invitedEmailMatches ? "Open team" : "Back to OpenWork Cloud"}
+                {user && invitedEmailMatches ? "Open team" : "Back to Open One Cloud"}
               </Link>
             </div>
           </div>

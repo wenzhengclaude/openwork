@@ -2094,6 +2094,9 @@ async function createMainWindow() {
     mainWindow?.setTitle(currentDisplayAppName);
     if (process.platform === "win32") mainWindow?.setSkipTaskbar(false);
     mainWindow?.show();
+    if (process.platform === "win32" && !cachedBrandImage) {
+      void applyDefaultAppIconImage().then((result) => recordBrandIconResult(result, null));
+    }
     flushPendingDeepLinks();
   });
 

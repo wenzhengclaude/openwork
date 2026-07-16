@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
-import { ArrowRight, CheckCircle2, KeyRound, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, KeyRound, Server, X } from "lucide-react";
 
 import { t } from "@/i18n";
 import { ProviderIcon } from "../../../design-system/provider-icon";
@@ -37,6 +37,7 @@ export type AiSettingsViewProps = {
   providerDisconnectStatus: string | null;
   providerDisconnectError: string | null;
   onOpenProviderAuth: () => void | Promise<void>;
+  onConfigureCompanyLocalProvider: () => void;
   onDisconnectProvider: (providerId: string) => void | Promise<void>;
   canDisconnectProvider: (source?: ConnectedProvider["source"]) => boolean;
   /** Set of local provider IDs that were imported from cloud. */
@@ -83,6 +84,14 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               />
             </LayoutSectionItemTitle>
             <LayoutSectionItemHeaderActions>
+              <Button
+                variant="outline"
+                onClick={props.onConfigureCompanyLocalProvider}
+                disabled={props.busy || props.providerAuthBusy}
+              >
+                <Server className="size-4" />
+                公司本地模型
+              </Button>
               <Button
                 onClick={() => void props.onOpenProviderAuth()}
                 disabled={props.busy || props.providerAuthBusy}

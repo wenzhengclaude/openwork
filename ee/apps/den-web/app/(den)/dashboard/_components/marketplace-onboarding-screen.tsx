@@ -215,7 +215,7 @@ export function MarketplaceOnboardingScreen() {
     <div className="mx-auto max-w-2xl px-4 pb-12 pt-6 sm:px-6">
       {/* Header */}
       <header className="text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#6C7890]">OpenWork Cloud</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#6C7890]">Open One Cloud</p>
         <h1 className="mt-3 text-[28px] font-semibold leading-[1.05] tracking-[-0.04em] text-[#07192C] sm:text-[34px]">
           {requiredDone ? `You're all set, ${orgName}.` : `Let's finish setting up ${orgName}.`}
         </h1>
@@ -306,7 +306,7 @@ export function MarketplaceOnboardingScreen() {
             done={modelsEnabled}
             required
             icon={<Sparkles className="h-4 w-4" />}
-            title="Turn on OpenWork Models"
+            title="Turn on Open One Models"
             helper="Best open-source and frontier models, ready to go. No API keys needed. Prefer your own provider? Use your own keys."
           >
             <div className="flex flex-col gap-2 sm:flex-row">

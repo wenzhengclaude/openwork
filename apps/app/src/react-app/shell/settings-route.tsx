@@ -164,6 +164,13 @@ import {
   OPENAI_IMAGE_MODEL,
 } from "@/react-app/domains/settings/openai-image-extension";
 import { OLLAMA_PROVIDER_CONFIG, type LocalProviderInstallInput } from "@/react-app/domains/settings/openai-image-extension";
+import { CompanyLocalProviderDialog } from "@/react-app/domains/settings/company-local-provider-dialog";
+import {
+  buildCompanyLocalProviderConfig,
+  COMPANY_LOCAL_PROVIDER_ID,
+  COMPANY_LOCAL_PROVIDER_NAME,
+  type CompanyLocalProviderInstallInput,
+} from "@/react-app/domains/settings/company-local-provider";
 
 const ROUTE_OPENWORK_CAPABILITIES: OpenworkServerCapabilities = {
   skills: { read: true, write: true, source: "openwork" },
@@ -428,6 +435,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [localProviderBusy, setLocalProviderBusy] = useState(false);
   const [localProviderStatus, setLocalProviderStatus] = useState<string | null>(null);
   const [localProviderError, setLocalProviderError] = useState<string | null>(null);
+  const [companyLocalProviderDialogOpen, setCompanyLocalProviderDialogOpen] = useState(false);
   const [googleWorkspaceConnected, setGoogleWorkspaceConnected] = useState(false);
   const [imageExtensionBusy, setImageExtensionBusy] = useState(false);
   const [imageExtensionStatus, setImageExtensionStatus] = useState<string | null>(null);
@@ -1061,6 +1069,41 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       setLocalProviderBusy(false);
     }
   }, [local, openworkClient, reloadCoordinator, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
+
+  const probeCompanyLocalProvider = useCallback(async (input: { baseUrl: string; apiKey: string }) => {
+    if (!openworkClient) {
+      throw new Error("Open One 本机服务未连接。");
+    }
+    return openworkClient.probeOpenAiCompatibleModels(input);
+  }, [openworkClient]);
+
+  const saveCompanyLocalProvider = useCallback(async (input: CompanyLocalProviderInstallInput) => {
+    const workspaceId = runtimeWorkspaceId?.trim() ?? "";
+    if (!openworkClient || !opencodeClient || !workspaceId) {
+      throw new Error("请先打开一个本地工作区。");
+    }
+    if (selectedWorkspace?.workspaceType === "remote") {
+      throw new Error("公司本地模型只能在本地工作区配置。");
+    }
+    if (!input.apiKey.trim() || !input.models.length) {
+      throw new Error("请先检测并选择至少一个模型。");
+    }
+
+    await openworkClient.patchConfig(workspaceId, {
+      opencode: {
+        provider: buildCompanyLocalProviderConfig(input),
+      },
+    });
+    reloadCoordinator.markReloadRequired("config", { type: "config", name: "opencode.json", action: "updated" });
+    await reloadEngineOrRestartDesktop(openworkClient, workspaceId);
+    await opencodeClient.auth.set({
+      providerID: COMPANY_LOCAL_PROVIDER_ID,
+      auth: { type: "api", key: input.apiKey.trim() },
+    });
+    await providerAuthStore.refreshProviders({ dispose: true });
+    await refreshProviderListQueries(getReactQueryClient());
+    toast.success(`${COMPANY_LOCAL_PROVIDER_NAME}已更新`);
+  }, [openworkClient, opencodeClient, providerAuthStore, reloadCoordinator, runtimeWorkspaceId, selectedWorkspace]);
 
   useEffect(() => {
     local.setUi((previous) => ({ ...previous, view: "settings", tab: route.tab }));
@@ -1986,6 +2029,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             providerDisconnectStatus={configActionStatus}
             providerDisconnectError={null}
             onOpenProviderAuth={handleOpenProviderAuth}
+            onConfigureCompanyLocalProvider={() => setCompanyLocalProviderDialogOpen(true)}
             onDisconnectProvider={async (providerId) => {
               await providerAuthStore.disconnectProvider(providerId);
             }}
@@ -2380,6 +2424,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         showOpenWorkModelsSubscribe={showOpenWorkModelsSubscribe}
         onSubscribeOpenWorkModels={subscribeToOpenWorkModels}
         onClose={() => providerAuthStore.closeProviderAuthModal()}
+      />
+      <CompanyLocalProviderDialog
+        open={companyLocalProviderDialogOpen}
+        onOpenChange={setCompanyLocalProviderDialogOpen}
+        onProbe={probeCompanyLocalProvider}
+        onSave={saveCompanyLocalProvider}
       />
       <CreateWorkspaceModal
         open={createWorkspaceOpen}

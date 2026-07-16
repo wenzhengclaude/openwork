@@ -14,6 +14,10 @@ export type ProviderCatalog = Record<string, Record<string, ProviderModel>>;
 
 const emptyModelBehaviorOptions: { value: string | null; label: string }[] = [];
 
+function tokenLimit(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
 export type UseModelBehaviorInput = {
   /** Result of useProviderListQuery().data — refreshed by the route. */
   providerList: { all: ProviderListItem[] } | undefined;
@@ -40,13 +44,15 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
 
   // Compute behavior (reasoning/thinking variant) options for the current
   // default model.
-  const { modelVariantLabel, modelBehaviorOptions, modelVariantValue } = useMemo(() => {
+  const { modelVariantLabel, modelBehaviorOptions, modelVariantValue, modelContextWindow, modelOutputLimit } = useMemo(() => {
     const variant = modelVariant ?? null;
     if (!defaultModel) {
       return {
         modelVariantLabel: t("settings.default_label"),
         modelBehaviorOptions: emptyModelBehaviorOptions,
         modelVariantValue: null,
+        modelContextWindow: null,
+        modelOutputLimit: null,
       };
     }
     const model = providerCatalog[defaultModel.providerID]?.[defaultModel.modelID];
@@ -55,6 +61,8 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
         modelVariantLabel: variant ?? t("settings.default_label"),
         modelBehaviorOptions: emptyModelBehaviorOptions,
         modelVariantValue: variant,
+        modelContextWindow: null,
+        modelOutputLimit: null,
       };
     }
     const summary = getModelBehaviorSummary(defaultModel.providerID, model, variant);
@@ -62,8 +70,17 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
       modelVariantLabel: summary.label,
       modelBehaviorOptions: summary.options,
       modelVariantValue: summary.value,
+      modelContextWindow: tokenLimit(model.limit?.context),
+      modelOutputLimit: tokenLimit(model.limit?.output),
     };
   }, [defaultModel, modelVariant, providerCatalog]);
 
-  return { providerCatalog, modelVariantLabel, modelBehaviorOptions, modelVariantValue };
+  return {
+    providerCatalog,
+    modelVariantLabel,
+    modelBehaviorOptions,
+    modelVariantValue,
+    modelContextWindow,
+    modelOutputLimit,
+  };
 }

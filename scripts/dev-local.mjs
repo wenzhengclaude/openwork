@@ -31,6 +31,7 @@ const databaseUrl = process.env.DATABASE_URL?.trim() || "mysql://root:password@1
 const dbEncryptionKey =
   process.env.DEN_DB_ENCRYPTION_KEY?.trim() ||
   "local-dev-db-encryption-key-please-change-1234567890"
+const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm"
 
 function detectWebOrigins() {
   const origins = new Set([
@@ -102,6 +103,7 @@ function run(command, args, options = {}) {
     const child = spawn(command, args, {
       cwd: rootDir,
       stdio: "inherit",
+      shell: process.platform === "win32" && command.endsWith(".cmd"),
       ...options,
     })
 
@@ -116,6 +118,32 @@ function run(command, args, options = {}) {
       reject(new Error(`${command} ${args.join(" ")} failed with ${detail}`))
     })
   })
+}
+
+async function syncDenSchema() {
+  const env = {
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+  }
+
+  await run(pnpmCommand, ["--filter", "@openwork-ee/den-db", "build"], { env })
+  await run(
+    pnpmCommand,
+    [
+      "--filter",
+      "@openwork-ee/den-db",
+      "exec",
+      "node",
+      "--import",
+      "tsx",
+      "./node_modules/drizzle-kit/bin.cjs",
+      "push",
+      "--config",
+      "drizzle.config.ts",
+      "--force",
+    ],
+    { env },
+  )
 }
 
 let startedMysql = false
@@ -190,18 +218,13 @@ async function main() {
   }
 
   console.log("[den] Syncing Den schema...")
-  await run("bash", ["-c", "pnpm --filter @openwork-ee/den-db build && pnpm --filter @openwork-ee/den-db exec node --import tsx ./node_modules/drizzle-kit/bin.cjs push --config drizzle.config.ts --force"], {
-    env: {
-      ...process.env,
-      DATABASE_URL: databaseUrl,
-    },
-  })
+  await syncDenSchema()
 
   const webOrigins = detectWebOrigins()
   console.log(`[den] Allowed local web origins: ${webOrigins}`)
 
   turboChild = spawn(
-    "pnpm",
+    pnpmCommand,
     [
       "exec",
       "turbo",
@@ -217,6 +240,7 @@ async function main() {
       cwd: rootDir,
       stdio: "inherit",
       detached: process.platform !== "win32",
+      shell: process.platform === "win32",
       env: {
         ...process.env,
         DATABASE_URL: databaseUrl,

@@ -118,6 +118,7 @@ export type SessionSurfaceProps = {
   modelVariantLabel: string;
   modelVariant: string | null;
   modelBehaviorOptions?: { value: string | null; label: string }[];
+  modelContextWindow?: number | null;
   onModelVariantChange: (value: string | null) => void;
   agentLabel: string;
   selectedAgent: string | null;
@@ -202,6 +203,16 @@ function statusLabel(snapshot: OpenworkSessionSnapshot | undefined, busy: boolea
   if (snapshot?.status.type === "busy") return "Running...";
   if (snapshot?.status.type === "retry") return `Retrying: ${snapshot.status.message}`;
   return "Ready";
+}
+
+function latestContextUsageTokens(snapshot: OpenworkSessionSnapshot | null): number | null {
+  if (!snapshot) return null;
+  for (const message of snapshot.messages.slice().reverse()) {
+    if (message.info.role !== "assistant") continue;
+    const input = message.info.tokens.input;
+    if (Number.isSafeInteger(input) && input >= 0) return input;
+  }
+  return null;
 }
 
 function controlTextArgument(args: unknown) {
@@ -497,6 +508,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   });
 
   const currentSnapshot = snapshotQuery.data?.session.id === props.sessionId ? snapshotQuery.data : null;
+  const contextUsageTokens = useMemo(
+    () => latestContextUsageTokens(currentSnapshot),
+    [currentSnapshot],
+  );
   const transcriptState = useSharedQueryState<UIMessage[]>(transcriptQueryKey, EMPTY_TRANSCRIPT);
   const statusState = useSharedQueryState(statusQueryKey, currentSnapshot?.status ?? IDLE_STATUS);
 
@@ -1464,6 +1479,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         modelVariantLabel={props.modelVariantLabel}
         modelVariant={props.modelVariant}
         modelBehaviorOptions={props.modelBehaviorOptions}
+        modelContextWindow={props.modelContextWindow}
+        contextUsageTokens={contextUsageTokens}
         onModelVariantChange={props.onModelVariantChange}
         agentLabel={props.agentLabel}
         selectedAgent={props.selectedAgent}

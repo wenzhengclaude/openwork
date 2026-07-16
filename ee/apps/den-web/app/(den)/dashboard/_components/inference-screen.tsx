@@ -153,11 +153,11 @@ const MODEL_LINEUP = Object.entries(INFERENCE_MODEL_ALIASES)
   .filter(([, model]) => model.enabled)
   .map(([id, model]) => ({
     id,
-    name: model.displayName.replace(/^OpenWork:\s*/, ""),
+    name: model.displayName.replace(/^(?:OpenWork|Open One):\s*/, ""),
   }));
 
 const VALUE_POINTS = [
-  "Open-source frontier models, hosted and kept up to date by OpenWork",
+  "Open-source frontier models, hosted and kept up to date by Open One",
   "No API keys to manage — every member is provisioned automatically",
   "One subscription covers your whole workspace, with usage limits that scale with your team",
 ];
@@ -176,7 +176,7 @@ function ModelsValueProp(props: {
             The best open-source models, ready for your whole team.
           </h2>
           <p className="mt-3 max-w-[560px] text-[14px] leading-6 text-gray-500">
-            OpenWork Models gives every member of your workspace instant access to a hand-picked
+            Open One Models gives every member of your workspace instant access to a hand-picked
             lineup of OSS frontier models — no provider accounts, no key juggling.
           </p>
           <ul className="mt-6 grid gap-3">
@@ -202,7 +202,7 @@ function ModelsValueProp(props: {
           </div>
           {props.isOwner ? null : (
             <p className="mt-3 text-[13px] leading-5 text-amber-700">
-              Only workspace owners can subscribe. Ask an owner to enable OpenWork Models for your team.
+              Only workspace owners can subscribe. Ask an owner to enable Open One Models for your team.
             </p>
           )}
         </div>
@@ -327,14 +327,14 @@ export function InferenceScreen() {
   const enabled = status?.enabled === true;
   const subscribed = status?.subscribed === true;
   const showValueProp = !loading && status !== null && !subscribed;
-  const cardTitle = enabled ? "OpenWork Models enabled" : "Enable OpenWork Models";
+  const cardTitle = enabled ? "Open One Models enabled" : "Enable Open One Models";
   const actionLabel = enabled ? "Manage subscription" : "Enable";
 
   return (
     <DashboardPageTemplate
       icon={Sparkles}
       badgeLabel="Beta"
-      title="OpenWork Models"
+      title="Open One Models"
       description="Frontier intelligence, hand picked for your team's most ambitious work."
       colors={["#0f172a", "#3155ff", "#22d3ee", "#f8fafc"]}
     >

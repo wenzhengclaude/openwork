@@ -1083,7 +1083,7 @@ function GithubDiscoveryPhase({ connectorInstanceId, onBack }: { connectorInstan
               <div className="min-w-0 text-[12.5px] text-gray-500">
                 {selectedPlugins.length === 0
                   ? "Select at least one plugin to import."
-                  : `This will create ${selectedPlugins.length} plugin${selectedPlugins.length === 1 ? "" : "s"} and their mappings in OpenWork.`}
+                  : `This will create ${selectedPlugins.length} plugin${selectedPlugins.length === 1 ? "" : "s"} and their mappings in Open One.`}
               </div>
               <DenButton
                 disabled={selectedPlugins.length === 0}

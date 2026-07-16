@@ -259,7 +259,7 @@ export function BrandAppearanceScreen() {
       <DashboardPageTemplate
         icon={Palette}
         title="Brand appearance"
-        description="Customize how your workspace appears across OpenWork."
+        description="Customize how your workspace appears across Open One."
         colors={["#F5F3FF", "#4C1D95", "#8B5CF6", "#DDD6FE"]}
       >
         {!orgContext.entitlements.desktopPolicies ? (
@@ -280,8 +280,8 @@ export function BrandAppearanceScreen() {
                 <div className="grid gap-5">
                   <label className="grid gap-3">
                     <span className="text-[14px] font-medium text-gray-700">Application name</span>
-                    <DenInput type="text" value={appNameDraft} onChange={(event) => setAppNameDraft(event.target.value)} placeholder="OpenWork" maxLength={64} disabled={!isOwner} />
-                    <span className="text-[11px] text-gray-400">The signed application identity stays OpenWork.</span>
+                    <DenInput type="text" value={appNameDraft} onChange={(event) => setAppNameDraft(event.target.value)} placeholder="Open One" maxLength={64} disabled={!isOwner} />
+                    <span className="text-[11px] text-gray-400">The signed application identity stays Open One.</span>
                   </label>
 
                   <label className="grid gap-3">

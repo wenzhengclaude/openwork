@@ -175,10 +175,10 @@ export function Microsoft365Dialog({
               </div>
               <p className="mt-1 text-[12px] leading-5 text-gray-500">Permission changes keep your encrypted client secret. Replace it only when rotating the Entra credential.</p>
               <div className="mt-3 rounded-xl border border-gray-100 bg-white px-3 py-2 text-[12px] text-gray-800">
-                Saved client ID: <span className="font-mono">{savedClientId ?? "stored in OpenWork"}</span>
+                Saved client ID: <span className="font-mono">{savedClientId ?? "stored in Open One"}</span>
               </div>
               <div className="mt-2 rounded-xl border border-gray-100 bg-white px-3 py-2 text-[12px] text-gray-800">
-                Tenant ID: <span className="font-mono">{savedTenantId ?? "stored in OpenWork"}</span>
+                Tenant ID: <span className="font-mono">{savedTenantId ?? "stored in Open One"}</span>
               </div>
               <DenButton
                 className="mt-3"

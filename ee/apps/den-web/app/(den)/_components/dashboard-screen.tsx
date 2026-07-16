@@ -301,7 +301,7 @@ export function DashboardScreen({ showSidebar = true }: { showSidebar?: boolean 
                       <MonitorIcon className="h-4 w-4" />
                       {desktopDisabled ? "Preparing desktop launch" : "Open in Desktop"}
                     </button>
-                    <span className="mt-2 text-[11px] font-medium text-[var(--dls-text-secondary)]">requires the OpenWork desktop app</span>
+                    <span className="mt-2 text-[11px] font-medium text-[var(--dls-text-secondary)]">requires the Open One desktop app</span>
                   </div>
                 </div>
               </div>
