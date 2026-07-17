@@ -209,6 +209,7 @@ interface ModelSelectProps {
   onOpenChange: (open: boolean) => void;
   onChange: (model: ModelRef) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
 export function ModelSelect({
@@ -217,6 +218,7 @@ export function ModelSelect({
   onOpenChange,
   onChange,
   disabled = false,
+  compact = false,
 }: ModelSelectProps) {
   const [search, setSearch] = React.useState("");
   const [promoHidden, setPromoHidden] = React.useState(isOpenWorkModelsPromoHidden);
@@ -259,6 +261,8 @@ export function ModelSelect({
       modelID: option.modelID,
     }),
   );
+  const selectedLabel = selectedOption?.title ?? value.modelID ?? "Select model";
+  const selectedProviderLabel = selectedOption?.description ?? value.providerID;
 
   const showOpenWorkModelsPromo = React.useMemo(
     () => !promoHidden && !hasOpenWorkModelsProvider(modelOptions.map((option) => option.providerID)),
@@ -311,16 +315,30 @@ export function ModelSelect({
             <PopoverTrigger
               type="button"
               disabled={disabled}
-              aria-label="Change model"
+              aria-label={`Change model, current model ${selectedLabel}`}
               aria-keyshortcuts="Meta+Alt+/"
-              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-gray-10 transition-colors hover:bg-gray-4 hover:text-gray-12 disabled:pointer-events-none disabled:opacity-60"
+              title={`${selectedProviderLabel}/${selectedLabel}`}
+              className={
+                compact
+                  ? "flex h-8 min-w-0 max-w-[min(16rem,42vw)] items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium text-gray-10 transition-colors hover:bg-gray-4 hover:text-gray-12 disabled:pointer-events-none disabled:opacity-60"
+                  : "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-gray-10 transition-colors hover:bg-gray-4 hover:text-gray-12 disabled:pointer-events-none disabled:opacity-60"
+              }
             />
           }
         >
-          <span className="max-w-48 truncate">
-            {selectedOption?.title ?? value.modelID ?? "Select model"}
+          {compact ? (
+            <ModelBrandIcon
+              modelId={value.modelID}
+              providerId={value.providerID}
+              providerName={selectedProviderLabel}
+              className="size-3.5 shrink-0 opacity-75"
+              size={14}
+            />
+          ) : null}
+          <span className={compact ? "min-w-0 truncate" : "max-w-48 truncate"}>
+            {selectedLabel}
           </span>
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-3 w-3 shrink-0" />
         </TooltipTrigger>
         <TooltipContent>
           Change model

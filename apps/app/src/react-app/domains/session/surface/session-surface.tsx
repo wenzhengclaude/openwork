@@ -467,6 +467,57 @@ function upsertAgentRunEvent(run: OpenworkAgentRun, event: OpenworkAgentRun["eve
   };
 }
 
+function createAgentRunChatMessage(input: {
+  runId: string;
+  role: "user" | "assistant";
+  text: string;
+  timestamp: number;
+}): UIMessage {
+  const id = `agent-run:${input.runId}:${input.role}`;
+  return {
+    id,
+    role: input.role,
+    metadata: { opencode: { created: input.timestamp } },
+    parts: input.text
+      ? [{
+        type: "text",
+        text: input.text,
+        state: "done",
+        providerMetadata: { opencode: { partId: `${id}:text` } },
+      }]
+      : [],
+  };
+}
+
+function appendAgentRunText(messages: UIMessage[], runId: string, delta: string): UIMessage[] {
+  const messageId = `agent-run:${runId}:assistant`;
+  return messages.map((message) => {
+    if (message.id !== messageId) return message;
+    const parts = [...message.parts];
+    const textIndex = parts.findIndex((part) => part.type === "text");
+    if (textIndex >= 0) {
+      const textPart = parts[textIndex];
+      if (textPart?.type === "text") {
+        parts[textIndex] = { ...textPart, text: `${textPart.text}${delta}` };
+      }
+    } else {
+      parts.push({
+        type: "text",
+        text: delta,
+        state: "done",
+        providerMetadata: { opencode: { partId: `${messageId}:text` } },
+      });
+    }
+    return { ...message, parts };
+  });
+}
+
+function appendAgentRunMessages(base: UIMessage[], agentRunMessages: UIMessage[]): UIMessage[] {
+  if (agentRunMessages.length === 0) return base;
+  const baseIds = new Set(base.map((message) => message.id));
+  return [...base, ...agentRunMessages.filter((message) => !baseIds.has(message.id))];
+}
+
 export function SessionSurface(props: SessionSurfaceProps) {
   const local = useLocal();
   const { config: shellConfig } = useShellConfig();
@@ -505,6 +556,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [runMode, setRunMode] = useState<ComposerRunMode>("opencode");
   const [approvalMode, setApprovalMode] = useState<OpenworkAgentApprovalMode>("auto-review");
   const [agentRuns, setAgentRuns] = useState<OpenworkAgentRun[]>([]);
+  const [agentRunMessages, setAgentRunMessages] = useState<UIMessage[]>([]);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
   const [rendered, setRendered] = useState<{ sessionId: string; snapshot: OpenworkSessionSnapshot } | null>(null);
@@ -580,6 +632,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setSending(false);
     setShowDelayedLoading(false);
     setAwaitingAssistantBaseline(null);
+    setAgentRuns([]);
+    setAgentRunMessages([]);
     // Composer draft state lives in the shared store keyed by session id, so
     // switching sessions preserves each session's own in-progress composer.
     autoOpenedTargetRef.current = null;
@@ -671,9 +725,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
     return "ready";
   }, [agentRunActive, liveStatus, sending]);
-  const renderedMessages = useMemo(
+  const snapshotRenderedMessages = useMemo(
     () => deriveRenderedSessionMessages({ transcriptState, snapshot }),
     [snapshot, transcriptState],
+  );
+  const renderedMessages = useMemo(
+    () => appendAgentRunMessages(snapshotRenderedMessages, agentRunMessages),
+    [agentRunMessages, snapshotRenderedMessages],
   );
   const openTargets = useMemo(() => deriveOpenTargets(renderedMessages), [renderedMessages]);
   const openTargetsFingerprint = useMemo(
@@ -855,8 +913,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
       approvalMode,
       prompt: promptText,
       model: props.selectedModel.modelID,
+      modelProvider: props.selectedModel.providerID,
+      sessionId: props.sessionId,
     });
     setAgentRuns((current) => [created.run, ...current.filter((run) => run.id !== created.run.id)].slice(0, 4));
+    setAgentRunMessages((current) => [
+      ...current,
+      createAgentRunChatMessage({ runId: created.run.id, role: "user", text: promptText, timestamp: Date.now() }),
+      createAgentRunChatMessage({ runId: created.run.id, role: "assistant", text: "", timestamp: Date.now() + 1 }),
+    ]);
     const controller = new AbortController();
     agentRunControllersRef.current.set(created.run.id, controller);
     void props.client.streamAgentRunEvents(
@@ -865,9 +930,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
       (event) => {
         setAgentRuns((current) => current.map((run) => run.id === event.runId ? upsertAgentRunEvent(run, event) : run));
         if (event.type === "message_delta") {
+          if (event.text) {
+            setAgentRunMessages((current) => appendAgentRunText(current, event.runId, event.text ?? ""));
+          }
           useSessionActivityStore.getState().markAssistantOutput(props.workspaceId, props.sessionId, undefined, {
             allowUnknownMessageRole: true,
           });
+        }
+        if (event.type === "error" && event.text) {
+          setAgentRunMessages((current) => appendAgentRunText(current, event.runId, `\n\n${event.title ? `${event.title}: ` : ""}${event.text}`));
         }
         if (event.type === "run_completed") {
           const activeController = agentRunControllersRef.current.get(event.runId);
@@ -881,10 +952,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
       if (controller.signal.aborted) return;
       const message = nextError instanceof Error ? nextError.message : "Agent run stream failed.";
       setError({ message });
+      setAgentRunMessages((current) => appendAgentRunText(current, created.run.id, `\n\n${message}`));
       useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId, message);
     });
     return true;
-  }, [approvalMode, props.client, props.selectedModel.modelID, props.sessionId, props.workspaceId, runMode]);
+  }, [approvalMode, props.client, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, runMode]);
 
   // Core sender shared by initial send and steered follow-ups. OpenCode
   // accepts follow-up user turns mid-run (steering) — the running loop picks

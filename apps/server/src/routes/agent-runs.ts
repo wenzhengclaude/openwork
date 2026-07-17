@@ -39,6 +39,8 @@ export function registerAgentRunRoutes(options: RegisterAgentRunRoutesOptions): 
     const mode = readMode(body.mode);
     const approvalMode = readApprovalMode(body.approvalMode);
     const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
+    const modelProvider = typeof body.modelProvider === "string" && body.modelProvider.trim() ? body.modelProvider.trim() : undefined;
+    const sessionId = typeof body.sessionId === "string" && body.sessionId.trim() ? body.sessionId.trim() : undefined;
     const run = manager.start({
       workspaceId: workspace.id,
       workspacePath: workspace.path,
@@ -46,6 +48,8 @@ export function registerAgentRunRoutes(options: RegisterAgentRunRoutesOptions): 
       approvalMode,
       prompt,
       model,
+      modelProvider,
+      sessionId,
     });
     return jsonResponse({ run: publicSnapshot(run) }, 202);
   });

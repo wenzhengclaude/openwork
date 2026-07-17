@@ -30,6 +30,8 @@ export class AgentRunManager {
         status: "starting",
         prompt: input.prompt,
         model: input.model ?? null,
+        modelProvider: input.modelProvider ?? null,
+        sessionId: input.sessionId ?? null,
         createdAt: now,
         updatedAt: now,
         events: [],

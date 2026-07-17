@@ -603,6 +603,8 @@ export type OpenworkAgentRun = {
   status: OpenworkAgentRunStatus;
   prompt: string;
   model: string | null;
+  modelProvider: string | null;
+  sessionId: string | null;
   createdAt: number;
   updatedAt: number;
   events: OpenworkAgentRunEvent[];
@@ -1336,7 +1338,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         { token, hostToken },
       );
     },
-    createAgentRun: (workspaceId: string, payload: { mode: OpenworkAgentRunMode; approvalMode?: OpenworkAgentApprovalMode; prompt: string; model?: string }) =>
+    createAgentRun: (workspaceId: string, payload: { mode: OpenworkAgentRunMode; approvalMode?: OpenworkAgentApprovalMode; prompt: string; model?: string; modelProvider?: string; sessionId?: string }) =>
       requestJson<{ run: OpenworkAgentRun }>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/agent-runs`,

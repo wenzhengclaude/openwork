@@ -4,7 +4,10 @@ import { resolveCodexCommand, resolveGrokCommand } from "./runtime-config.js";
 
 const ENV_KEYS = [
   "OPENONE_CODEX_ARGS",
+  "OPENONE_CODEX_API_KEY",
+  "OPENONE_CODEX_BASE_URL",
   "OPENONE_CODEX_COMMAND",
+  "OPENONE_CODEX_PROVIDER_ID",
   "CODEX_COMMAND",
   "OPENONE_GROK_ARGS",
   "OPENONE_GROK_COMMAND",
@@ -49,6 +52,22 @@ describe("resolveCodexCommand", () => {
     expect(resolveCodexCommand()).toEqual({
       command: "custom-codex",
       args: ["app-server", "--listen", "stdio://"],
+    });
+  });
+
+  test("injects Open One provider config for managed Codex models", () => {
+    process.env.OPENONE_CODEX_BASE_URL = "http://models.internal/v1";
+    process.env.OPENONE_CODEX_API_KEY = "internal-key";
+
+    expect(resolveCodexCommand("company-local")).toEqual({
+      command: "codex",
+      args: [
+        "app-server",
+        "-c",
+        'model_provider="company-local"',
+        "-c",
+        'model_providers.company-local={ name="Open One", base_url="http://models.internal/v1", wire_api="responses", env_key="OPENONE_CODEX_API_KEY" }',
+      ],
     });
   });
 });

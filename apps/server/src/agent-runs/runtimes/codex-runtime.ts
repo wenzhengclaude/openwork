@@ -1,13 +1,16 @@
 import { containsNeedle, extractText, isJsonObject, readNestedString, readString, type JsonObject, type JsonValue, StdioJsonRpcClient } from "../json-rpc.js";
-import { resolveCodexCommand, resolveRuntimeEnv } from "../runtime-config.js";
+import { resolveCodexCommand, resolveCodexModelProvider, resolveRuntimeEnv } from "../runtime-config.js";
 import type { AgentRunApprovalMode, AgentRunEmitter, AgentRunInput, AgentRuntime } from "../types.js";
 
 export class CodexRuntime implements AgentRuntime {
   readonly kind = "codex";
 
   async run(input: AgentRunInput, emit: AgentRunEmitter, signal: AbortSignal): Promise<void> {
-    const command = resolveCodexCommand();
+    const modelProvider = resolveCodexModelProvider(input.modelProvider);
+    const command = resolveCodexCommand(modelProvider);
     let completed = false;
+    let failureMessage = "";
+    let failureTimer: ReturnType<typeof setTimeout> | null = null;
     let resolveCompleted: (() => void) | null = null;
     let rejectCompleted: ((error: Error) => void) | null = null;
     const completedPromise = new Promise<void>((resolve, reject) => {
@@ -35,7 +38,36 @@ export class CodexRuntime implements AgentRuntime {
       },
       onNotification: (message) => {
         this.handleNotification(message.method, message.params, emit);
+        const notificationFailure = notificationErrorMessage(message.method, message.params);
+        if (notificationFailure && !failureMessage) {
+          failureMessage = notificationFailure;
+          emit({
+            type: "error",
+            runtime: this.kind,
+            agentId: "codex",
+            title: "Codex failed",
+            text: notificationFailure,
+            status: "failed",
+          });
+          failureTimer = setTimeout(() => {
+            if (completed) return;
+            completed = true;
+            resolveCompleted?.();
+          }, 5_000);
+        }
         if (message.method === "turn/completed") {
+          const turnFailure = turnCompletionErrorMessage(message.params);
+          if (turnFailure && !failureMessage) {
+            failureMessage = turnFailure;
+            emit({
+              type: "error",
+              runtime: this.kind,
+              agentId: "codex",
+              title: "Codex failed",
+              text: turnFailure,
+              status: "failed",
+            });
+          }
           completed = true;
           resolveCompleted?.();
         }
@@ -61,7 +93,7 @@ export class CodexRuntime implements AgentRuntime {
         },
       });
       client.notify("initialized");
-      const thread = await client.request("thread/start", codexThreadStartParams(input));
+      const thread = await client.request("thread/start", codexThreadStartParams(input, modelProvider));
       const threadId = resolveThreadId(thread);
       if (!threadId) {
         throw new Error("Codex app-server did not return a thread id");
@@ -76,10 +108,12 @@ export class CodexRuntime implements AgentRuntime {
         ],
         cwd: input.workspacePath,
         ...(input.model ? { model: input.model } : {}),
+        ...(modelProvider ? { modelProvider } : {}),
       });
       if (!completed) await completedPromise;
-      emit({ type: "agent_completed", runtime: this.kind, agentId: "codex", title: "Codex", status: "completed" });
+      emit({ type: "agent_completed", runtime: this.kind, agentId: "codex", title: "Codex", status: failureMessage ? "failed" : "completed" });
     } finally {
+      if (failureTimer) clearTimeout(failureTimer);
       signal.removeEventListener("abort", onAbort);
       client.dispose();
     }
@@ -126,13 +160,14 @@ export class CodexRuntime implements AgentRuntime {
   }
 }
 
-function codexThreadStartParams(input: AgentRunInput): JsonObject {
+function codexThreadStartParams(input: AgentRunInput, modelProvider: string | undefined): JsonObject {
   const params: JsonObject = {
     cwd: input.workspacePath,
     ephemeral: true,
     runtimeWorkspaceRoots: [input.workspacePath],
   };
   if (input.model) params.model = input.model;
+  if (modelProvider) params.modelProvider = modelProvider;
 
   if (input.approvalMode === "full-access") {
     params.approvalPolicy = "never";
@@ -197,6 +232,15 @@ function resolveThreadId(value: JsonValue | undefined): string {
   const nested = readNestedString(value, ["thread", "id"]);
   if (nested) return nested;
   return "";
+}
+
+function notificationErrorMessage(method: string, params: JsonValue | undefined): string {
+  if (method !== "error") return "";
+  return readNestedString(params, ["error", "message"]) || readString(params, "message") || extractText(params);
+}
+
+function turnCompletionErrorMessage(params: JsonValue | undefined): string {
+  return readNestedString(params, ["turn", "error", "message"]) || readNestedString(params, ["error", "message"]) || "";
 }
 
 function inferTitle(value: JsonValue | undefined): string {

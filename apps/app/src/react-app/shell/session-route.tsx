@@ -254,7 +254,43 @@ function attachmentMime(attachment: ComposerAttachment) {
   return "text/plain";
 }
 
-async function draftToParts(draft: ComposerDraft, workspaceRoot: string) {
+function safeInboxSegment(value: string) {
+  const cleaned = value.trim().replace(/[<>:"|?*\u0000-\u001f]/g, "-").replace(/[\\/]+/g, "-");
+  return cleaned.replace(/^\.+$/, "-") || "attachment";
+}
+
+function inboxWorkspacePath(relativePath: string) {
+  return `.opencode/openwork/inbox/${relativePath.replace(/\\/g, "/")}`;
+}
+
+async function stageDraftAttachments(input: {
+  client: OpenworkServerClient;
+  workspaceId: string;
+  sessionId: string;
+  attachments: ComposerAttachment[];
+}) {
+  if (!input.attachments.length) return [];
+  const sessionSegment = safeInboxSegment(input.sessionId);
+  const uploads = await Promise.allSettled(input.attachments.map(async (attachment, index) => {
+    const filename = safeInboxSegment(attachment.name);
+    const relativePath = `attachments/${sessionSegment}/${Date.now()}-${index + 1}-${filename}`;
+    const uploaded = await input.client.uploadInbox(input.workspaceId, attachment.file, { path: relativePath });
+    return {
+      name: attachment.name,
+      path: inboxWorkspacePath(uploaded.path),
+    };
+  }));
+  return uploads.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+}
+
+async function draftToParts(input: {
+  draft: ComposerDraft;
+  workspaceRoot: string;
+  client: OpenworkServerClient;
+  workspaceId: string;
+  sessionId: string;
+}) {
+  const { draft, workspaceRoot } = input;
   const parts: Array<TextPartInput | FilePartInput | AgentPartInput> = [];
   const root = workspaceRoot.trim();
 
@@ -304,6 +340,24 @@ async function draftToParts(draft: ComposerDraft, workspaceRoot: string) {
         filename: filenameFromPath(part.path),
       });
     }
+  }
+
+  const stagedAttachments = await stageDraftAttachments({
+    client: input.client,
+    workspaceId: input.workspaceId,
+    sessionId: input.sessionId,
+    attachments: draft.attachments,
+  });
+  if (stagedAttachments.length) {
+    parts.push({
+      type: "text",
+      text: [
+        "",
+        "Attached files were also saved into the workspace inbox for tool or shell access:",
+        ...stagedAttachments.map((attachment) => `- ${attachment.name}: ${attachment.path}`),
+        "Use these paths instead of looking for the bare filename in the current directory.",
+      ].join("\n"),
+    });
   }
 
   parts.push(...firstLineLocalFileParts(draft.resolvedText ?? draft.text, root));
@@ -923,7 +977,13 @@ export function SessionRoute() {
           return;
         }
 
-        const parts = await draftToParts(draft, selectedWorkspaceRoot);
+        const parts = await draftToParts({
+          draft,
+          workspaceRoot: selectedWorkspaceRoot,
+          client,
+          workspaceId: selectedWorkspaceId,
+          sessionId: targetSessionId,
+        });
         const envSystemContext = await buildOpenworkEnvSystemContext(client, {
           cacheKey: targetSessionId,
           runtimeKey: environmentRuntimeKey,

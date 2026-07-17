@@ -42,6 +42,8 @@ export type AgentRunInput = {
   approvalMode: AgentRunApprovalMode;
   prompt: string;
   model?: string;
+  modelProvider?: string;
+  sessionId?: string;
 };
 
 export type AgentRunSnapshot = {
@@ -52,6 +54,8 @@ export type AgentRunSnapshot = {
   status: AgentRunStatus;
   prompt: string;
   model: string | null;
+  modelProvider: string | null;
+  sessionId: string | null;
   createdAt: number;
   updatedAt: number;
   events: AgentRunEvent[];

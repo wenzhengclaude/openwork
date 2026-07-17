@@ -1455,8 +1455,8 @@ export function ReactSessionComposer(props: ComposerProps) {
             />
 
             {/* Action row — attachments, quick actions, model controls, and send */}
-            <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <div className="mt-2 flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
                 <input
                   ref={(element) => {
                     fileInput = element ?? undefined;
@@ -1920,13 +1920,14 @@ export function ReactSessionComposer(props: ComposerProps) {
                   contextWindow={props.modelContextWindow}
                   usageTokens={props.contextUsageTokens}
                 />
-                <div className="flex h-9 items-center rounded-full bg-gray-3 pr-1">
+                <div className="ml-auto flex h-9 min-w-0 max-w-[min(20rem,46vw)] shrink items-center rounded-full bg-gray-3 pr-1">
                   <ModelSelect
                     open={props.modelPickerOpen}
                     value={props.selectedModel}
                     onOpenChange={props.onModelPickerOpenChange}
                     onChange={props.onModelChange}
                     disabled={props.busy}
+                    compact
                   />
                   <ModelBehaviorSelect
                     value={props.modelVariant}
@@ -1952,7 +1953,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   on the chevron shows how many messages are queued.
                   Escape arms a "Hit Escape again to stop the agent" prompt.
               */}
-              <div className="ml-auto flex shrink-0 items-end gap-1.5">
+              <div className="flex shrink-0 items-end gap-1.5">
                 {props.busy ? (
                   <>
                     {escapeArmed ? (
@@ -1963,11 +1964,11 @@ export function ReactSessionComposer(props: ComposerProps) {
                     <button
                       type="button"
                       onClick={props.onStop}
-                      className="mr-2 inline-flex h-9 max-h-9 items-center gap-2 rounded-full border border-dls-border bg-transparent px-4 text-[13px] font-medium text-gray-11 transition-colors hover:bg-gray-3"
+                      className="mr-1 inline-flex h-9 max-h-9 items-center gap-2 rounded-full border border-dls-border bg-transparent px-3 text-[13px] font-medium text-gray-11 transition-colors hover:bg-gray-3 sm:px-4"
                       title={t("composer.stop")}
                     >
                       <Square size={12} fill="currentColor" />
-                      <span>{t("composer.stop")}</span>
+                      <span className="hidden sm:inline">{t("composer.stop")}</span>
                     </button>
                     <div className="flex items-end">
                       <button

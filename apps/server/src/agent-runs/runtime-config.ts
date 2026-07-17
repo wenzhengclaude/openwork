@@ -5,11 +5,26 @@ export type RuntimeCommand = {
   args: string[];
 };
 
-export function resolveCodexCommand(): RuntimeCommand {
+export function resolveCodexCommand(modelProvider?: string): RuntimeCommand {
+  const args = parseArgs(process.env.OPENONE_CODEX_ARGS);
+  if (args) {
+    return {
+      command: process.env.OPENONE_CODEX_COMMAND?.trim() || process.env.CODEX_COMMAND?.trim() || "codex",
+      args,
+    };
+  }
   return {
     command: process.env.OPENONE_CODEX_COMMAND?.trim() || process.env.CODEX_COMMAND?.trim() || "codex",
-    args: parseArgs(process.env.OPENONE_CODEX_ARGS) ?? ["app-server"],
+    args: ["app-server", ...codexProviderConfigArgs(modelProvider)],
   };
+}
+
+export function resolveCodexModelProvider(modelProvider?: string): string | undefined {
+  const trimmed = modelProvider?.trim();
+  const baseUrl = process.env.OPENONE_CODEX_BASE_URL?.trim();
+  if (!baseUrl) return trimmed || undefined;
+  const override = process.env.OPENONE_CODEX_PROVIDER_ID?.trim();
+  return safeCodexProviderId(override || trimmed || "openone");
 }
 
 export function resolveGrokCommand(model?: string, approvalMode: AgentRunApprovalMode = "auto-review"): RuntimeCommand {
@@ -35,8 +50,30 @@ export function resolveRuntimeEnv(prefix: "CODEX" | "GROK"): Record<string, stri
   const baseUrl = process.env[`OPENONE_${prefix}_BASE_URL`]?.trim();
   if (baseUrl) env[`${prefix}_MODELS_BASE_URL`] = baseUrl;
   const apiKey = process.env[`OPENONE_${prefix}_API_KEY`]?.trim();
-  if (apiKey) env[`${prefix}_API_KEY`] = apiKey;
+  if (apiKey) {
+    env[`${prefix}_API_KEY`] = apiKey;
+    env[`OPENONE_${prefix}_API_KEY`] = apiKey;
+  }
   return env;
+}
+
+function codexProviderConfigArgs(modelProvider?: string): string[] {
+  const baseUrl = process.env.OPENONE_CODEX_BASE_URL?.trim();
+  if (!baseUrl) return [];
+  const providerId = resolveCodexModelProvider(modelProvider) ?? "openone";
+  const hasApiKey = Boolean(process.env.OPENONE_CODEX_API_KEY?.trim());
+  const fields = [
+    `name=${quoteTomlString("Open One")}`,
+    `base_url=${quoteTomlString(baseUrl)}`,
+    'wire_api="responses"',
+    ...(hasApiKey ? ['env_key="OPENONE_CODEX_API_KEY"'] : []),
+  ];
+  return [
+    "-c",
+    `model_provider=${quoteTomlString(providerId)}`,
+    "-c",
+    `model_providers.${providerId}={ ${fields.join(", ")} }`,
+  ];
 }
 
 function parseArgs(input: string | undefined): string[] | null {
@@ -51,6 +88,14 @@ function parseArgs(input: string | undefined): string[] | null {
     // Fall back to shell-like whitespace splitting for simple local overrides.
   }
   return trimmed.split(/\s+/).filter(Boolean);
+}
+
+function quoteTomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function safeCodexProviderId(value: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : "openone";
 }
 
 function resolveGrokAlwaysApprove(approvalMode: AgentRunApprovalMode): boolean {
