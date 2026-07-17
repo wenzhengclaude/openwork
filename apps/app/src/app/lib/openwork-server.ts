@@ -558,6 +558,53 @@ export type OpenworkSessionGroupEvent = {
   timestamp: number;
 };
 
+export type OpenworkAgentRunMode = "codex" | "grok-build" | "multi-agent";
+
+export type OpenworkAgentRuntimeKind = "codex" | "grok-build";
+
+export type OpenworkAgentRunStatus = "starting" | "running" | "completed" | "cancelled" | "failed";
+
+export type OpenworkAgentRunEventType =
+  | "run_started"
+  | "agent_started"
+  | "agent_completed"
+  | "child_agent_started"
+  | "child_agent_completed"
+  | "message_delta"
+  | "thought_delta"
+  | "tool_call"
+  | "plan"
+  | "log"
+  | "error"
+  | "run_completed";
+
+export type OpenworkAgentRunEvent = {
+  seq: number;
+  runId: string;
+  workspaceId: string;
+  type: OpenworkAgentRunEventType;
+  timestamp: number;
+  runtime?: OpenworkAgentRuntimeKind;
+  agentId?: string;
+  parentAgentId?: string;
+  title?: string;
+  text?: string;
+  status?: OpenworkAgentRunStatus | "pending";
+  details?: Record<string, unknown>;
+};
+
+export type OpenworkAgentRun = {
+  id: string;
+  workspaceId: string;
+  mode: OpenworkAgentRunMode;
+  status: OpenworkAgentRunStatus;
+  prompt: string;
+  model: string | null;
+  createdAt: number;
+  updatedAt: number;
+  events: OpenworkAgentRunEvent[];
+};
+
 // Fallback for explicit server-mode URL derivation. Desktop local workers replace this
 // with the persisted runtime-discovered port once the host reports it.
 export const DEFAULT_OPENWORK_SERVER_PORT = 8787;
@@ -963,6 +1010,93 @@ async function requestJson<T>(
   return json as T;
 }
 
+async function requestEventStream(
+  baseUrl: string,
+  path: string,
+  options: {
+    token?: string;
+    hostToken?: string;
+    signal?: AbortSignal;
+    onEvent: (event: OpenworkAgentRunEvent) => void;
+  },
+): Promise<void> {
+  const url = `${baseUrl}${path}`;
+  const fetchImpl = resolveFetch(url);
+  const response = await fetchImpl(url, {
+    method: "GET",
+    headers: buildAuthHeaders(options.token, options.hostToken, { Accept: "text/event-stream" }),
+    signal: options.signal,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    let message = response.statusText;
+    try {
+      const parsed: unknown = text ? JSON.parse(text) : null;
+      if (parsed && typeof parsed === "object" && "message" in parsed && typeof parsed.message === "string") {
+        message = parsed.message;
+      }
+    } catch {
+      if (text.trim()) message = text.trim();
+    }
+    throw new OpenworkServerError(response.status, "request_failed", message);
+  }
+  const body = response.body;
+  if (!body) throw new OpenworkServerError(502, "stream_unavailable", "Agent run event stream is unavailable");
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const read = await reader.read();
+      if (read.done) break;
+      buffer += decoder.decode(read.value, { stream: true });
+      const parts = buffer.split(/\r?\n\r?\n/);
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        const event = parseServerSentAgentRunEvent(part);
+        if (event) options.onEvent(event);
+      }
+    }
+    buffer += decoder.decode();
+    const event = parseServerSentAgentRunEvent(buffer);
+    if (event) options.onEvent(event);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function parseServerSentAgentRunEvent(block: string): OpenworkAgentRunEvent | null {
+  const data = block
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n")
+    .trim();
+  if (!data) return null;
+  try {
+    const parsed: unknown = JSON.parse(data);
+    return isOpenworkAgentRunEvent(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function isOpenworkAgentRunEvent(value: unknown): value is OpenworkAgentRunEvent {
+  if (!isUnknownRecord(value)) return false;
+  return (
+    typeof value.seq === "number" &&
+    typeof value.runId === "string" &&
+    typeof value.workspaceId === "string" &&
+    typeof value.type === "string" &&
+    typeof value.timestamp === "number"
+  );
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 async function requestMultipartRaw(
   baseUrl: string,
   path: string,
@@ -1199,6 +1333,35 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         { token, hostToken },
       );
     },
+    createAgentRun: (workspaceId: string, payload: { mode: OpenworkAgentRunMode; prompt: string; model?: string }) =>
+      requestJson<{ run: OpenworkAgentRun }>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/agent-runs`,
+        { token, hostToken, method: "POST", body: payload, timeoutMs: 60_000 },
+      ),
+    getAgentRun: (workspaceId: string, runId: string) =>
+      requestJson<{ run: OpenworkAgentRun }>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/agent-runs/${encodeURIComponent(runId)}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      ),
+    cancelAgentRun: (workspaceId: string, runId: string) =>
+      requestJson<{ ok: true }>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/cancel`,
+        { token, hostToken, method: "POST", timeoutMs: timeouts.status },
+      ),
+    streamAgentRunEvents: (
+      workspaceId: string,
+      runId: string,
+      onEvent: (event: OpenworkAgentRunEvent) => void,
+      options?: { signal?: AbortSignal },
+    ) =>
+      requestEventStream(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/events`,
+        { token, hostToken, signal: options?.signal, onEvent },
+      ),
     getSession: (workspaceId: string, sessionId: string) =>
       requestJson<{ item: Session }>(
         baseUrl,

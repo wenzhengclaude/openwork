@@ -22,11 +22,12 @@ import {
   Unplug,
   Zap,
 } from "lucide-react";
+import { toast } from "@/components/ui/sonner";
 
 import { isBuiltInOpenWorkExtension, getMcpServerName, type McpDirectoryInfo } from "../../../../app/constants";
 import { evaluateEnablement } from "../../../../app/enablement";
 import type { EnablementResult } from "../../../../app/extensions";
-import type { CloudImportedPlugin } from "../../../../app/cloud/import-state";
+import type { CloudImportedPlugin, CloudImportedSkill } from "../../../../app/cloud/import-state";
 import { ExtensionCard } from "../../../design-system/extension-card";
 import { ExtensionDetailModal } from "../../../design-system/extension-detail-modal";
 import {
@@ -44,7 +45,7 @@ import {
   getMcpIdentityKey,
   normalizeMcpSlug,
 } from "../../../../app/mcp";
-import type { McpServerEntry, McpStatusMap } from "../../../../app/types";
+import type { DenOrgSkillCard, McpServerEntry, McpStatusMap } from "../../../../app/types";
 import { formatRelativeTime, isDesktopRuntime, isWindowsPlatform } from "../../../../app/utils";
 import { t } from "../../../../i18n";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,9 @@ export type SkillItem = {
   path: string;
 };
 
+type InstallResult = { ok: boolean; message: string };
+type CloudSkillInstallState = "available" | "installed" | "update" | "missing_local";
+
 const getSkillHiddenId = (skill: SkillItem) => `skill:${skill.name}`;
 
 export type McpViewProps = {
@@ -90,10 +94,16 @@ export type McpViewProps = {
   isRemoteWorkspace: boolean;
   /** Installed skills to render alongside MCPs in the grid. */
   installedSkills?: SkillItem[];
+  /** Organization cloud skills available to install into this workspace. */
+  cloudSkills?: DenOrgSkillCard[];
+  /** Cloud skill import metadata stored in this workspace. */
+  importedCloudSkills?: Record<string, CloudImportedSkill>;
   /** Installed marketplace packages to render alongside runtime extensions. */
   installedPlugins?: CloudImportedPlugin[];
   /** Uninstall a skill by name. */
   uninstallSkill?: (name: string) => void;
+  /** Install or update an organization cloud skill in this workspace. */
+  installCloudSkill?: (skill: DenOrgSkillCard) => Promise<InstallResult>;
   /** Remove an imported marketplace package by plugin id. */
   removeCloudPlugin?: (pluginId: string) => void | Promise<unknown>;
   /** Read skill content by name. */
@@ -164,6 +174,18 @@ const friendlyStatus = (status: ReactMcpStatus) => {
       return t("mcp.friendly_status_issue");
   }
 };
+
+function isOauthSignInPending(
+  entry: McpDirectoryInfo,
+  configured: boolean,
+  status: ReactMcpStatus | undefined,
+) {
+  return configured && entry.type === "remote" && entry.oauth === true && status !== "connected";
+}
+
+function oauthStatusLabel(status: ReactMcpStatus | undefined) {
+  return friendlyStatus(status ?? "needs_auth");
+}
 
 const statusBadgeStyle = (status: ReactMcpStatus) => {
   switch (status) {
@@ -247,6 +269,7 @@ export function McpView(props: McpViewProps) {
   const [detailSkillContent, setDetailSkillContent] = useState<string | null>(null);
   const [detailPlugin, setDetailPlugin] = useState<CloudImportedPlugin | null>(null);
   const [detailOrgMcpItem, setDetailOrgMcpItem] = useState<ExtensionItem | null>(null);
+  const [installingCloudSkillId, setInstallingCloudSkillId] = useState<string | null>(null);
   const [openworkUiMcpCommand, setOpenworkUiMcpCommand] = useState<string[] | null>(null);
   const [openworkUiMcpEnvironment, setOpenworkUiMcpEnvironment] = useState<Record<string, string> | null>(null);
   const [computerUseMcpCommand, setComputerUseMcpCommand] = useState<string[] | null>(null);
@@ -446,6 +469,22 @@ export function McpView(props: McpViewProps) {
   const connectedCount = props.mcpServers.filter(
     (entry) => resolveStatus(entry) === "connected",
   ).length;
+  const installedSkillNames = new Set((props.installedSkills ?? []).map((skill) => skill.name));
+  const cloudSkillInstallState = (skill: DenOrgSkillCard): CloudSkillInstallState => {
+    const imported = props.importedCloudSkills?.[skill.id];
+    if (!imported) return "available";
+    if (!installedSkillNames.has(imported.installedName)) return "missing_local";
+
+    const remoteUpdatedAt = skill.updatedAt ? Date.parse(skill.updatedAt) : Number.NaN;
+    const importedUpdatedAt = imported.updatedAt ? Date.parse(imported.updatedAt) : Number.NaN;
+    if (
+      Number.isFinite(remoteUpdatedAt) &&
+      (!Number.isFinite(importedUpdatedAt) || remoteUpdatedAt > importedUpdatedAt)
+    ) {
+      return "update";
+    }
+    return "installed";
+  };
   const hiddenCount = quickConnectList.filter((entry) => isOpenWorkExtensionHidden(entry)).length +
     (props.installedSkills ?? []).filter((skill) => isOpenWorkExtensionHidden(getSkillHiddenId(skill))).length +
     (props.installedPlugins ?? []).filter((plugin) => isOpenWorkExtensionHidden(`plugin:${plugin.pluginId}`)).length;
@@ -505,6 +544,23 @@ export function McpView(props: McpViewProps) {
       );
     } finally {
       setRevealBusy(false);
+    }
+  };
+
+  const installCloudSkill = async (skill: DenOrgSkillCard) => {
+    if (!props.installCloudSkill || installingCloudSkillId) return;
+    setInstallingCloudSkillId(skill.id);
+    try {
+      const result = await props.installCloudSkill(skill);
+      if (result.ok) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("skills.install_failed"));
+    } finally {
+      setInstallingCloudSkillId(null);
     }
   };
 
@@ -587,6 +643,15 @@ export function McpView(props: McpViewProps) {
             return skill.name.toLowerCase().includes(q) || (skill.description ?? "").toLowerCase().includes(q);
           })
         }
+        cloudSkills={
+          (props.cloudSkills ?? []).filter((skill) => {
+            if (filter === "mcp") return false;
+            if (cloudSkillInstallState(skill) === "installed") return false;
+            if (!search.trim()) return true;
+            const q = search.toLowerCase();
+            return skill.title.toLowerCase().includes(q) || (skill.description ?? "").toLowerCase().includes(q);
+          })
+        }
         installedPlugins={
           (props.installedPlugins ?? []).filter((plugin) => {
             if (!showHidden && isOpenWorkExtensionHidden(`plugin:${plugin.pluginId}`)) return false;
@@ -642,6 +707,9 @@ export function McpView(props: McpViewProps) {
             });
           }
         }}
+        cloudSkillInstallState={cloudSkillInstallState}
+        installingCloudSkillId={installingCloudSkillId}
+        onCloudSkillInstall={(skill) => void installCloudSkill(skill)}
         onPluginDetail={setDetailPlugin}
         onOrgMcpDetail={setDetailOrgMcpItem}
         orgMcpDisconnectingId={props.orgMcpDisconnectingId ?? null}
@@ -750,6 +818,10 @@ export function McpView(props: McpViewProps) {
           : detailEntry.kind === "extension" && !isMcpBackedExtension(detailEntry)
           ? props.isExtensionConnected?.(detailEntry) ?? false
           : isQuickConnectConfigured(detailEntry);
+        const detailStatus = quickConnectStatus(detailEntry)?.status;
+        const needsOauthSignIn = isOauthSignInPending(detailEntry, isConnected, detailStatus);
+        const modalConnected = needsOauthSignIn ? false : isConnected;
+        const configuredServer = props.mcpServers.find((server) => server.name === getMcpIdentityKey(detailEntry));
         const isGoogleWorkspace = detailEntry.id === "google-workspace";
         return (
           <ExtensionDetailModal
@@ -760,7 +832,8 @@ export function McpView(props: McpViewProps) {
             iconSlug={detailEntry.iconSlug}
             iconSrc={detailEntry.iconSrc}
             kind={detailEntry.kind ?? "mcp"}
-            connected={isConnected}
+            connected={modalConnected}
+            disconnectedLabel={needsOauthSignIn ? oauthStatusLabel(detailStatus) : undefined}
             connecting={props.mcpConnectingName === detailEntry.name}
             hidden={hidden}
             preview={detailEntry.preview}
@@ -774,7 +847,11 @@ export function McpView(props: McpViewProps) {
             oauth={detailEntry.oauth}
             configSlot={disabledReason ? null : extensionConfigSlot}
             showEnablementCard={!isGoogleWorkspace}
-            onConnect={disabledReason ? undefined : isToggleOnlyExtension(detailEntry) ? () => {
+            connectLabel={needsOauthSignIn ? t("mcp.login_action") : undefined}
+            onConnect={disabledReason ? undefined : needsOauthSignIn && configuredServer ? () => {
+              props.authorizeMcp(configuredServer);
+              setDetailEntry(null);
+            } : isToggleOnlyExtension(detailEntry) ? () => {
               setOpenWorkExtensionEnabled(detailEntry, true);
               setDetailEntry(null);
             } : hasConfigSlot ? undefined : () => {
@@ -918,6 +995,7 @@ function McpCustomAppCard(props: { onOpen: () => void; onOpenGithubImport?: () =
 function McpQuickConnectSection(props: {
   entries: McpDirectoryInfo[];
   installedSkills?: SkillItem[];
+  cloudSkills?: DenOrgSkillCard[];
   installedPlugins?: CloudImportedPlugin[];
   installedOrgMcpItems?: ExtensionItem[];
   busy: boolean;
@@ -932,6 +1010,9 @@ function McpQuickConnectSection(props: {
   onConnect: (entry: McpDirectoryInfo) => void;
   onDetail: (entry: McpDirectoryInfo) => void;
   onSkillDetail?: (skill: SkillItem) => void;
+  cloudSkillInstallState: (skill: DenOrgSkillCard) => CloudSkillInstallState;
+  installingCloudSkillId: string | null;
+  onCloudSkillInstall?: (skill: DenOrgSkillCard) => void;
   onPluginDetail?: (plugin: CloudImportedPlugin) => void;
   onOrgMcpDetail?: (item: ExtensionItem) => void;
   orgMcpDisconnectingId: string | null;
@@ -951,6 +1032,8 @@ function McpQuickConnectSection(props: {
         {props.entries.map((entry) => {
           const configured = props.isConfigured(entry);
           const enablement = props.enablementForEntry?.(entry);
+          const runtimeStatus = props.statusForEntry(entry)?.status;
+          const needsOauthSignIn = isOauthSignInPending(entry, configured, runtimeStatus);
           const connecting = props.connectingName === entry.name;
           const hidden = props.isEntryHidden(entry);
           const disabledReason = props.disabledReasonForEntry(entry);
@@ -965,15 +1048,38 @@ function McpQuickConnectSection(props: {
               iconSrc={entry.iconSrc}
               url={entryUrl}
               kind={entry.kind ?? "mcp"}
-              connected={configured}
+              connected={needsOauthSignIn ? false : configured}
+              statusLabel={needsOauthSignIn ? oauthStatusLabel(runtimeStatus) : undefined}
+              statusTone={needsOauthSignIn ? "warning" : "neutral"}
               enablement={enablement?.results}
               connecting={connecting}
               hidden={hidden}
               preview={entry.preview}
               disabledReason={disabledReason}
               disabled={props.busy}
-              actionLabel={configured ? "View details" : t("mcp.tap_to_connect")}
+              actionLabel={configured ? needsOauthSignIn ? t("mcp.login_action") : "View details" : t("mcp.tap_to_connect")}
               onClick={() => props.onDetail(entry)}
+            />
+          );
+        })}
+
+        {(props.cloudSkills ?? []).map((skill) => {
+          const state = props.cloudSkillInstallState(skill);
+          const installing = props.installingCloudSkillId === skill.id;
+          const actionLabel = state === "update" ? t("skills.cloud_update_skill") : t("skills.install");
+          return (
+            <ExtensionCard
+              key={`cloud-skill:${skill.id}`}
+              name={skill.title}
+              description={skill.description ?? "Available from your organization."}
+              kind="skill"
+              connected={false}
+              statusLabel={state === "update" ? t("skills.cloud_status_update") : undefined}
+              statusTone={state === "update" ? "warning" : "neutral"}
+              connecting={installing}
+              disabled={props.busy || installing || !props.onCloudSkillInstall}
+              actionLabel={actionLabel}
+              onClick={() => props.onCloudSkillInstall?.(skill)}
             />
           );
         })}
@@ -1044,7 +1150,7 @@ function McpQuickConnectSection(props: {
           );
         })}
 
-        {props.entries.length === 0 && (props.installedSkills ?? []).length === 0 && (props.installedPlugins ?? []).length === 0 && (props.installedOrgMcpItems ?? []).length === 0 ? (
+        {props.entries.length === 0 && (props.installedSkills ?? []).length === 0 && (props.cloudSkills ?? []).length === 0 && (props.installedPlugins ?? []).length === 0 && (props.installedOrgMcpItems ?? []).length === 0 ? (
           <div className="col-span-full rounded-xl border border-dashed border-dls-border px-5 py-10 text-center">
             <Unplug size={24} className="mx-auto mb-3 text-dls-secondary/30" />
             <div className="text-sm font-medium text-dls-secondary">No extensions found</div>

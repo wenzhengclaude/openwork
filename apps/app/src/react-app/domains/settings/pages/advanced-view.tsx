@@ -103,15 +103,15 @@ export function AdvancedView(props: AdvancedViewProps) {
   })();
 
   const clientDetailLines = props.clientConnected
-    ? ["Chat and task creation can use the OpenCode engine for this workspace."]
+    ? [t("settings.runtime_client_connected_detail")]
     : [
-        "Chat and task creation may fail until OpenCode restarts.",
-        "OpenWork server config sources below can still be inspected.",
+        t("settings.runtime_client_disconnected_detail"),
+        t("settings.runtime_client_disconnected_sources_detail"),
       ];
 
   const openworkDetailLines = props.openworkServerStatus === "connected"
-    ? ["Runtime DB, workspace config, and migration diagnostics are available."]
-    : ["Runtime config diagnostics need the OpenWork server connection."];
+    ? [t("settings.runtime_server_connected_detail")]
+    : [t("settings.runtime_server_disconnected_detail")];
 
   const submitDebugDeepLink = async () => {
     const rawUrl = debugDeepLinkInput.trim();
@@ -144,7 +144,7 @@ export function AdvancedView(props: AdvancedViewProps) {
     try {
       setConfigStatus(await props.getRuntimeConfigStatus());
     } catch (error) {
-      setConfigStatusError(error instanceof Error ? error.message : "Failed to load runtime config status.");
+      setConfigStatusError(error instanceof Error ? error.message : t("settings.runtime_config_status_load_failed"));
     } finally {
       setConfigStatusBusy(false);
     }
@@ -163,13 +163,13 @@ export function AdvancedView(props: AdvancedViewProps) {
       dispatchLocal({
         type: "migrationStatus",
         status: result.migrated
-          ? `Migrated legacy runtime config: ${result.keys.join(", ")}.`
-          : "No legacy runtime config found for this workspace.",
+          ? t("settings.runtime_config_migrated_status", { keys: result.keys.join(", ") })
+          : t("settings.runtime_config_no_legacy_status"),
       });
     } catch (error) {
       dispatchLocal({
         type: "migrationStatus",
-        status: error instanceof Error ? error.message : "Failed to migrate legacy runtime config.",
+        status: error instanceof Error ? error.message : t("settings.runtime_config_migrate_failed"),
       });
     } finally {
       dispatchLocal({ type: "migrationDone" });

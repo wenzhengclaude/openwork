@@ -20,6 +20,8 @@ export type ExtensionCardProps = {
   /** Whether the extension is already installed/connected. */
   connected?: boolean;
   connectedLabel?: string;
+  statusLabel?: string;
+  statusTone?: "warning" | "neutral";
   /** Per-condition enablement results. When provided, overrides `connected`. */
   enablement?: EnablementResult[];
   /** Whether a connect operation is in progress. */
@@ -71,6 +73,8 @@ export function ExtensionCard(props: ExtensionCardProps) {
     kind = "mcp",
     connected: connectedProp = false,
     connectedLabel = "Connected",
+    statusLabel,
+    statusTone = "neutral",
     enablement,
     connecting = false,
     disabled = false,
@@ -86,6 +90,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
   const allMet = enablement ? enablement.every((r) => r.met) : connectedProp;
   const someMet = enablement ? enablement.some((r) => r.met) && !allMet : false;
   const connected = allMet;
+  const warning = !connected && (someMet || statusTone === "warning");
   const resolvedIconSrc = resolveExtensionIconUrl({ iconSrc, iconSlug, serviceUrl: url });
 
   return (
@@ -96,7 +101,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
       className={`group w-full rounded-xl border p-4 text-left transition-all ${
         connected
           ? "border-green-6 bg-green-2"
-          : someMet
+          : warning
           ? "border-amber-6 bg-amber-2"
           : "border-dls-border bg-dls-surface hover:bg-dls-hover"
       } ${hidden ? "border-dashed opacity-70" : ""}`}
@@ -106,7 +111,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
         <div className="relative shrink-0">
           <div
             className={`flex size-10 items-center justify-center rounded-lg border ${
-              connected ? "border-green-6 bg-green-2" : someMet ? "border-amber-6 bg-amber-2" : "border-dls-border bg-dls-hover"
+              connected ? "border-green-6 bg-green-2" : warning ? "border-amber-6 bg-amber-2" : "border-dls-border bg-dls-hover"
             }`}
           >
             {connecting ? (
@@ -127,7 +132,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
             <div className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full border-2 border-dls-surface bg-green-9">
               <CheckCircle2 size={9} className="text-white" strokeWidth={3} />
             </div>
-          ) : someMet ? (
+          ) : warning ? (
             <div className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full border-2 border-dls-surface bg-amber-9">
               <AlertCircle size={9} className="text-white" strokeWidth={3} />
             </div>
@@ -142,9 +147,13 @@ export function ExtensionCard(props: ExtensionCardProps) {
               <span className="shrink-0 rounded-md bg-green-3 px-1.5 py-0.5 text-[10px] font-medium text-green-11">
                 {connectedLabel}
               </span>
-            ) : someMet ? (
+            ) : warning ? (
               <span className="shrink-0 rounded-md bg-amber-3 px-1.5 py-0.5 text-[10px] font-medium text-amber-11">
-                Partially set up
+                {statusLabel ?? "Partially set up"}
+              </span>
+            ) : statusLabel ? (
+              <span className="shrink-0 rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-medium text-dls-secondary">
+                {statusLabel}
               </span>
             ) : (
               <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${kindStyle[kind]}`}>

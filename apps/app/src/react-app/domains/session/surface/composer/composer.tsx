@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { AppWindowMac, ArrowUp, Check, ChevronDown, ChevronRight, FileText, Gauge, ListPlus, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
+import { AppWindowMac, ArrowUp, Braces, Check, ChevronDown, ChevronRight, FileText, Gauge, GitBranch, Hammer, ListPlus, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { toast } from "@/components/ui/sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -20,6 +20,7 @@ import { LexicalPromptEditor, type LexicalPromptEditorHandle } from "./editor";
 import { listRunningAppsForMention } from "./app-mentions";
 import type { ComposerMentionKind } from "./mention-encoding";
 import { getSlashCommandQuery } from "./slash-command";
+import type { OpenworkAgentRunMode } from "@/app/lib/openwork-server";
 
 type MentionItem = {
   id: string;
@@ -37,6 +38,7 @@ type PastedTextChip = {
 
 type ToolMenuSettingsSection = "commands" | "skills" | "mcps" | "plugins";
 type ToolMenuSection = "agents" | "commands" | "skills" | "mcps" | "extensions" | `plugin:${string}`;
+export type ComposerRunMode = "opencode" | OpenworkAgentRunMode;
 
 function isComposerExtensionAvailable(entry: McpDirectoryInfo) {
   const hasSessionSurface = entry.extensionManifest?.contributions?.some((contribution) =>
@@ -74,6 +76,8 @@ type ComposerProps = {
   modelContextWindow?: number | null;
   contextUsageTokens?: number | null;
   onModelVariantChange: (value: string | null) => void;
+  runMode: ComposerRunMode;
+  onRunModeChange: (value: ComposerRunMode) => void;
   agentLabel: string;
   selectedAgent: string | null;
   listAgents: () => Promise<Agent[]>;
@@ -115,6 +119,33 @@ const IMAGE_COMPRESS_TARGET_BYTES = 1_500_000;
 const FILE_URL_RE = /^file:\/\//i;
 const HTTP_URL_RE = /^https?:\/\//i;
 const DEFAULT_AGENT_NAME = "openwork";
+
+const RUN_MODE_ITEMS: Array<{ value: ComposerRunMode; label: string; shortLabel: string; description: string }> = [
+  {
+    value: "opencode",
+    label: "默认模式",
+    shortLabel: "默认",
+    description: "使用 Open One 当前标准工作流。",
+  },
+  {
+    value: "multi-agent",
+    label: "多智能体",
+    shortLabel: "多智能体",
+    description: "并行运行 Codex 和 Grok Build。",
+  },
+  {
+    value: "codex",
+    label: "Codex",
+    shortLabel: "Codex",
+    description: "使用 Codex 原生子智能体。",
+  },
+  {
+    value: "grok-build",
+    label: "Grok Build",
+    shortLabel: "Grok",
+    description: "使用 Grok Build 原生子智能体。",
+  },
+];
 
 function formatContextTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
@@ -161,6 +192,17 @@ function ContextWindowIndicator({
 
 function isNonDefaultAgent(agent: Agent) {
   return agent.name !== DEFAULT_AGENT_NAME;
+}
+
+function RunModeIcon({ mode, className }: { mode: ComposerRunMode; className?: string }) {
+  if (mode === "codex") return <Braces size={14} className={className} />;
+  if (mode === "grok-build") return <Hammer size={14} className={className} />;
+  if (mode === "multi-agent") return <GitBranch size={14} className={className} />;
+  return <Terminal size={14} className={className} />;
+}
+
+function runModeLabel(mode: ComposerRunMode) {
+  return RUN_MODE_ITEMS.find((item) => item.value === mode)?.shortLabel ?? "默认";
 }
 
 /**
@@ -321,6 +363,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   let fileInput: HTMLInputElement | undefined;
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
+  const [runModeMenuOpen, setRunModeMenuOpen] = useState(false);
   const [commands, setCommands] = useState<SlashCommandOption[]>([]);
   const [commandsLoading, setCommandsLoading] = useState(false);
   const [skillsLoading, setSkillsLoading] = useState(false);
@@ -363,6 +406,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const toolMenuRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<LexicalPromptEditorHandle | null>(null);
   const agentMenuRef = useRef<HTMLDivElement | null>(null);
+  const runModeMenuRef = useRef<HTMLDivElement | null>(null);
   // IME composition guard: while an IME composition is active, we must not
   // treat Enter as a submit. Three signals keep this reliable across WebKit,
   // Chrome, and Safari: event.isComposing, event.keyCode === 229, and the
@@ -436,7 +480,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const mentionOpenNext = Boolean(mentionMatch);
   const mentionQuery = mentionMatch?.[1] ?? "";
   const nonDefaultAgents = useMemo(() => agents.filter(isNonDefaultAgent), [agents]);
-  const showAgentPicker = props.selectedAgent !== null || nonDefaultAgents.length > 0;
+  const showAgentPicker = props.runMode === "opencode" && (props.selectedAgent !== null || nonDefaultAgents.length > 0);
 
   useEffect(() => {
     setSlashOpen(slashOpenNext);
@@ -649,6 +693,20 @@ export function ReactSessionComposer(props: ComposerProps) {
       window.removeEventListener("mousedown", handlePointerDown);
     };
   }, [agentMenuOpen]);
+
+  useEffect(() => {
+    if (!runModeMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (runModeMenuRef.current?.contains(target)) return;
+      setRunModeMenuOpen(false);
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [runModeMenuOpen]);
 
   useEffect(() => {
     if (!toolMenuOpen) return;
@@ -1598,6 +1656,60 @@ export function ReactSessionComposer(props: ComposerProps) {
                             </div>
                           ) : null}
                         </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div ref={runModeMenuRef} className="relative">
+                  <button
+                    type="button"
+                    className="flex h-9 max-h-9 items-center gap-1.5 rounded-md px-1.5 text-[12px] font-medium text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                    onClick={() => setRunModeMenuOpen((value) => !value)}
+                    disabled={props.busy}
+                    aria-expanded={runModeMenuOpen}
+                    title="运行模式"
+                  >
+                    <RunModeIcon mode={props.runMode} className="text-gray-10" />
+                    <span className="max-w-[92px] truncate">{runModeLabel(props.runMode)}</span>
+                    <ChevronDown size={13} />
+                  </button>
+                  {runModeMenuOpen ? (
+                    <div className="absolute left-0 bottom-full z-40 mb-2 w-72 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                      <div className="border-b border-dls-border px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-10">
+                        运行模式
+                      </div>
+                      <div
+                        role="presentation"
+                        className="max-h-72 space-y-1 overflow-y-auto p-2"
+                        onMouseDown={(event) => event.preventDefault()}
+                      >
+                        {RUN_MODE_ITEMS.map((item) => {
+                          const active = props.runMode === item.value;
+                          return (
+                            <button
+                              key={item.value}
+                              type="button"
+                              className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-xs transition-colors ${active ? "bg-gray-2 text-gray-12" : "text-gray-11 hover:bg-gray-2/70"}`}
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                props.onRunModeChange(item.value);
+                                setRunModeMenuOpen(false);
+                              }}
+                            >
+                              <span className="flex min-w-0 items-start gap-2.5">
+                                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-white text-gray-11 shadow-sm">
+                                  <RunModeIcon mode={item.value} />
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate font-semibold">{item.label}</span>
+                                  <span className="mt-0.5 block text-gray-10">{item.description}</span>
+                                </span>
+                              </span>
+                              {active ? <Check size={14} className="mt-1 shrink-0 text-gray-10" /> : null}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : null}

@@ -56,6 +56,7 @@ import {
   type WorkspaceExportSensitiveMode,
 } from "./workspace-export-safety.js";
 import { serve, type ServeResult } from "./serve-node.js";
+import { registerAgentRunRoutes } from "./routes/agent-runs.js";
 import { registerCoreRoutes } from "./routes/core.js";
 import { registerFileRoutes } from "./routes/files.js";
 import { registerOperationRoutes } from "./routes/operations.js";
@@ -1353,6 +1354,16 @@ function createRoutes(
     resolveWorkspace,
     createWorkspaceOpencodeClient,
     unwrapOpencodeResult,
+  });
+
+  registerAgentRunRoutes({
+    routes,
+    config,
+    jsonResponse,
+    readJsonBody,
+    ensureWritable,
+    requireClientScope,
+    resolveWorkspace,
   });
 
   addRoute(routes, "GET", "/workspace/:id/config", "client", async (ctx) => {

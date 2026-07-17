@@ -333,7 +333,7 @@ interface AdvancedRuntimeMigrationSectionProps {
 }
 
 function formatKeys(keys: string[]) {
-  return keys.length ? keys.join(", ") : "none";
+  return keys.length ? keys.join(", ") : t("settings.runtime_config_none");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -356,8 +356,7 @@ function providerModelCount(config: Record<string, unknown>) {
   }, 0);
 }
 
-function RuntimeConfigSummary(props: { config: Record<string, unknown> }) {
-  const config = props.config;
+function runtimeConfigStats(config: Record<string, unknown>) {
   const providers = countRecord(config.provider);
   const models = providerModelCount(config);
   const agents = countRecord(config.agent);
@@ -365,30 +364,105 @@ function RuntimeConfigSummary(props: { config: Record<string, unknown> }) {
   const mcps = countRecord(config.mcp);
   const permissions = countRecord(config.permission);
   const disabledProviders = countArray(config.disabled_providers);
-  const defaultAgent = typeof config.default_agent === "string" ? config.default_agent : "not set";
+  const defaultAgent = typeof config.default_agent === "string"
+    ? config.default_agent
+    : t("settings.runtime_config_not_set");
+
+  return { agents, defaultAgent, disabledProviders, mcps, models, permissions, plugins, providers };
+}
+
+function RuntimeConfigSummary(props: { config: Record<string, unknown> }) {
+  const stats = runtimeConfigStats(props.config);
 
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      <div className="rounded-lg border border-gray-6 bg-gray-2/60 p-2">
-        <div className="text-[10px] uppercase tracking-wide text-gray-8">Default agent</div>
-        <div className="mt-1 truncate font-mono text-[11px] text-gray-12" title={defaultAgent}>{defaultAgent}</div>
+      <div className="min-h-16 rounded-lg border border-gray-6 bg-gray-2/70 p-3">
+        <div className="text-[11px] font-medium text-gray-9">
+          {t("settings.runtime_config_default_agent")}
+        </div>
+        <div className="mt-1 truncate font-mono text-sm text-gray-12" title={stats.defaultAgent}>
+          {stats.defaultAgent}
+        </div>
       </div>
-      <div className="rounded-lg border border-gray-6 bg-gray-2/60 p-2">
-        <div className="text-[10px] uppercase tracking-wide text-gray-8">Providers / models</div>
-        <div className="mt-1 font-mono text-[11px] text-gray-12">{providers} providers, {models} models</div>
+      <div className="min-h-16 rounded-lg border border-gray-6 bg-gray-2/70 p-3">
+        <div className="text-[11px] font-medium text-gray-9">
+          {t("settings.runtime_config_providers_models")}
+        </div>
+        <div className="mt-1 font-mono text-sm text-gray-12">
+          {t("settings.runtime_config_providers_models_value", { providers: stats.providers, models: stats.models })}
+        </div>
       </div>
-      <div className="rounded-lg border border-gray-6 bg-gray-2/60 p-2">
-        <div className="text-[10px] uppercase tracking-wide text-gray-8">Agents / plugins</div>
-        <div className="mt-1 font-mono text-[11px] text-gray-12">{agents} agents, {plugins} plugins</div>
+      <div className="min-h-16 rounded-lg border border-gray-6 bg-gray-2/70 p-3">
+        <div className="text-[11px] font-medium text-gray-9">
+          {t("settings.runtime_config_agents_plugins")}
+        </div>
+        <div className="mt-1 font-mono text-sm text-gray-12">
+          {t("settings.runtime_config_agents_plugins_value", { agents: stats.agents, plugins: stats.plugins })}
+        </div>
       </div>
-      <div className="rounded-lg border border-gray-6 bg-gray-2/60 p-2">
-        <div className="text-[10px] uppercase tracking-wide text-gray-8">MCP / permissions</div>
-        <div className="mt-1 font-mono text-[11px] text-gray-12">{mcps} MCPs, {permissions} permission keys</div>
+      <div className="min-h-16 rounded-lg border border-gray-6 bg-gray-2/70 p-3">
+        <div className="text-[11px] font-medium text-gray-9">
+          {t("settings.runtime_config_mcp_permissions")}
+        </div>
+        <div className="mt-1 font-mono text-sm text-gray-12">
+          {t("settings.runtime_config_mcp_permissions_value", { mcps: stats.mcps, permissions: stats.permissions })}
+        </div>
       </div>
-      {disabledProviders ? (
-        <div className="rounded-lg border border-gray-6 bg-gray-2/60 p-2 sm:col-span-2 lg:col-span-4">
-          <div className="text-[10px] uppercase tracking-wide text-gray-8">Disabled providers</div>
-          <div className="mt-1 font-mono text-[11px] text-gray-12">{disabledProviders}</div>
+      {stats.disabledProviders ? (
+        <div className="rounded-lg border border-gray-6 bg-gray-2/70 p-3 sm:col-span-2 lg:col-span-4">
+          <div className="text-[11px] font-medium text-gray-9">
+            {t("settings.runtime_config_disabled_providers")}
+          </div>
+          <div className="mt-1 font-mono text-[11px] text-gray-12">{stats.disabledProviders}</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RuntimeConfigCompactSummary(props: { config: Record<string, unknown> }) {
+  const stats = runtimeConfigStats(props.config);
+
+  return (
+    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-md bg-gray-2 px-2.5 py-2">
+        <div className="text-[10px] font-medium uppercase text-gray-8">
+          {t("settings.runtime_config_agent")}
+        </div>
+        <div className="mt-0.5 truncate font-mono text-[11px] text-gray-12" title={stats.defaultAgent}>
+          {stats.defaultAgent}
+        </div>
+      </div>
+      <div className="rounded-md bg-gray-2 px-2.5 py-2">
+        <div className="text-[10px] font-medium uppercase text-gray-8">
+          {t("settings.runtime_config_providers_models")}
+        </div>
+        <div className="mt-0.5 whitespace-nowrap font-mono text-[11px] text-gray-12">
+          {t("settings.runtime_config_providers_models_value", { providers: stats.providers, models: stats.models })}
+        </div>
+      </div>
+      <div className="rounded-md bg-gray-2 px-2.5 py-2">
+        <div className="text-[10px] font-medium uppercase text-gray-8">
+          {t("settings.runtime_config_agents_plugins")}
+        </div>
+        <div className="mt-0.5 whitespace-nowrap font-mono text-[11px] text-gray-12">
+          {t("settings.runtime_config_agents_plugins_value", { agents: stats.agents, plugins: stats.plugins })}
+        </div>
+      </div>
+      <div className="rounded-md bg-gray-2 px-2.5 py-2">
+        <div className="text-[10px] font-medium uppercase text-gray-8">
+          {t("settings.runtime_config_mcp_permissions")}
+        </div>
+        <div className="mt-0.5 whitespace-nowrap font-mono text-[11px] text-gray-12">
+          {t("settings.runtime_config_mcp_permissions_value", { mcps: stats.mcps, permissions: stats.permissions })}
+        </div>
+      </div>
+      {stats.disabledProviders ? (
+        <div className="rounded-md bg-gray-2 px-2.5 py-2 md:col-span-2 xl:col-span-4">
+          <div className="text-[10px] font-medium uppercase text-gray-8">
+            {t("settings.runtime_config_disabled_providers")}
+          </div>
+          <div className="mt-0.5 font-mono text-[11px] text-gray-12">{stats.disabledProviders}</div>
         </div>
       ) : null}
     </div>
@@ -404,17 +478,43 @@ function RuntimeConfigSourceBlock(props: {
   config: Record<string, unknown>;
 }) {
   return (
-    <div className="space-y-2 rounded-xl border border-gray-6 bg-gray-1/70 p-3">
-      <div>
-        <div className="font-medium text-gray-12">{props.title}</div>
-        <div className="text-[11px] text-gray-9">{props.description}</div>
-        {props.path ? <div className="mt-1 break-all font-mono text-[11px] text-gray-8">{props.path}</div> : null}
-        {props.exists !== undefined ? <div className="text-[11px] text-gray-9">{props.exists ? "Found" : "Not found"}</div> : null}
-        <div className="text-[11px] text-gray-9">Keys: {formatKeys(props.keys)}</div>
+    <div className="overflow-hidden rounded-lg border border-gray-6 bg-gray-1">
+      <div className="space-y-3 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="font-medium text-gray-12">{props.title}</div>
+            <div className="text-[11px] text-gray-9">{props.description}</div>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-1.5">
+            {props.exists !== undefined ? (
+              <Badge
+                variant="outline"
+                className={props.exists ? "border-green-7/40 bg-green-3 text-green-11" : "border-gray-7/50 bg-gray-3 text-gray-10"}
+              >
+                {props.exists
+                  ? t("settings.runtime_config_found")
+                  : t("settings.runtime_config_not_found")}
+              </Badge>
+            ) : null}
+            <Badge variant="outline" className="border-gray-7/50 bg-gray-3 text-gray-11">
+              {t("settings.runtime_config_key_count", { count: props.keys.length })}
+            </Badge>
+          </div>
+        </div>
+        {props.path ? (
+          <div className="break-all rounded-md bg-gray-2 px-2 py-1.5 font-mono text-[11px] text-gray-8">
+            {props.path}
+          </div>
+        ) : null}
+        <div className="text-[11px] text-gray-9">
+          {t("settings.runtime_config_keys", { keys: formatKeys(props.keys) })}
+        </div>
+        <RuntimeConfigCompactSummary config={props.config} />
       </div>
-      <RuntimeConfigSummary config={props.config} />
-      <details className="rounded-lg bg-gray-3 p-2">
-        <summary className="cursor-pointer text-[11px] font-medium text-gray-11">Show raw JSON</summary>
+      <details className="border-t border-gray-6 bg-gray-2/70 px-3 py-2">
+        <summary className="cursor-pointer text-[11px] font-medium text-gray-11">
+          {t("settings.runtime_config_show_raw_json")}
+        </summary>
         <pre className="mt-2 max-h-56 overflow-auto font-mono text-[11px] text-gray-11">
           {JSON.stringify(props.config, null, 2)}
         </pre>
@@ -427,17 +527,17 @@ export function AdvancedRuntimeMigrationSection(props: AdvancedRuntimeMigrationS
   return (
     <LayoutSection>
       <LayoutSectionHeader>
-        <LayoutSectionTitle>OpenCode config sources</LayoutSectionTitle>
+        <LayoutSectionTitle>{t("settings.runtime_config_sources_title")}</LayoutSectionTitle>
         <LayoutSectionDescription>
-          Inspect what OpenWork controls at runtime versus what belongs to your workspace config. This works through the OpenWork server and does not require the OpenCode engine to be healthy.
+          {t("settings.runtime_config_sources_desc")}
         </LayoutSectionDescription>
       </LayoutSectionHeader>
 
       <LayoutSectionItem>
         <LayoutSectionItemHeader>
-          <LayoutSectionItemTitle>Move OpenWork-managed config</LayoutSectionItemTitle>
+          <LayoutSectionItemTitle>{t("settings.runtime_config_move_title")}</LayoutSectionItemTitle>
           <LayoutSectionItemDescription>
-            Moves older OpenWork-owned runtime keys from `.opencode/openwork.json` and safe OpenWork-managed keys from `opencode.jsonc` into the runtime database.
+            {t("settings.runtime_config_move_desc")}
           </LayoutSectionItemDescription>
           <LayoutSectionItemHeaderActions>
             <Button
@@ -448,7 +548,7 @@ export function AdvancedRuntimeMigrationSection(props: AdvancedRuntimeMigrationS
               disabled={props.busy || props.configStatusBusy || !props.canMigrate}
             >
               <RefreshCcw size={14} className={props.configStatusBusy ? "animate-spin" : ""} />
-              Refresh
+              {t("settings.runtime_config_refresh")}
             </Button>
             <Button
               type="button"
@@ -458,22 +558,35 @@ export function AdvancedRuntimeMigrationSection(props: AdvancedRuntimeMigrationS
               disabled={props.busy || props.migrationBusy || !props.canMigrate}
             >
               <Database size={14} />
-              {props.migrationBusy ? "Migrating..." : "Migrate"}
+              {props.migrationBusy
+                ? t("settings.runtime_config_migrating")
+                : t("settings.runtime_config_migrate")}
             </Button>
           </LayoutSectionItemHeaderActions>
         </LayoutSectionItemHeader>
         {props.migrationStatus ? <SettingsNotice>{props.migrationStatus}</SettingsNotice> : null}
         {props.configStatusError ? <SettingsNotice>{props.configStatusError}</SettingsNotice> : null}
         {props.configStatus ? (
-          <div className="space-y-3 rounded-xl border border-gray-6 bg-gray-1/60 p-3 text-xs text-gray-10">
-            <div className="space-y-2 rounded-xl border border-blue-6/50 bg-blue-2/40 p-3">
-              <div className="font-medium text-gray-12">Effective injected OpenCode config</div>
-              <div className="text-[11px] text-gray-9">
-                This is the OpenWork-built config object injected through the server-managed `OPENCODE_CONFIG` file. It includes OpenWork defaults plus runtime DB values and is rewritten on every runtime config change.
+          <div className="space-y-4 text-xs text-gray-10">
+            <div className="space-y-3 rounded-lg border border-blue-6/50 bg-blue-2/30 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-12">
+                    {t("settings.runtime_config_effective_title")}
+                  </div>
+                  <div className="mt-1 max-w-3xl text-[11px] text-gray-9">
+                    {t("settings.runtime_config_effective_desc")}
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-blue-7/40 bg-blue-3 text-blue-11">
+                  {t("settings.runtime_config_runtime_source")}
+                </Badge>
               </div>
               <RuntimeConfigSummary config={props.configStatus.effectiveRuntime ?? props.configStatus.runtime} />
-              <details className="rounded-lg bg-gray-3 p-2">
-                <summary className="cursor-pointer text-[11px] font-medium text-gray-11">Show raw injected JSON</summary>
+              <details className="rounded-md bg-gray-3 p-2">
+                <summary className="cursor-pointer text-[11px] font-medium text-gray-11">
+                  {t("settings.runtime_config_show_raw_injected_json")}
+                </summary>
                 <pre className="mt-2 max-h-72 overflow-auto font-mono text-[11px] text-gray-11">
                   {JSON.stringify(props.configStatus.effectiveRuntime ?? props.configStatus.runtime, null, 2)}
                 </pre>
@@ -482,66 +595,94 @@ export function AdvancedRuntimeMigrationSection(props: AdvancedRuntimeMigrationS
             {props.configStatus.sources ? (
               <div className="space-y-3">
                 <div>
-                  <div className="font-medium text-gray-12">OpenCode source breakdown</div>
-                  <div className="text-[11px] text-gray-9">
-                    OpenCode also reads its own project and global config files. OpenWork injects the runtime config separately; for OpenWork-managed keys, the injected config is the source to inspect.
+                  <div className="font-medium text-gray-12">
+                    {t("settings.runtime_config_source_breakdown_title")}
+                  </div>
+                  <div className="max-w-4xl text-[11px] text-gray-9">
+                    {t("settings.runtime_config_source_breakdown_desc")}
                   </div>
                 </div>
-                <RuntimeConfigSourceBlock
-                  title="Project opencode config"
-                  description="Workspace-level OpenCode config owned by the user/project."
-                  path={props.configStatus.sources.projectOpencode.path}
-                  exists={props.configStatus.sources.projectOpencode.exists}
-                  keys={props.configStatus.sources.projectOpencode.keys}
-                  config={props.configStatus.sources.projectOpencode.config}
-                />
-                <RuntimeConfigSourceBlock
-                  title="Global opencode config"
-                  description="User-level OpenCode config under ~/.config/opencode."
-                  path={props.configStatus.sources.globalOpencode.path}
-                  exists={props.configStatus.sources.globalOpencode.exists}
-                  keys={props.configStatus.sources.globalOpencode.keys}
-                  config={props.configStatus.sources.globalOpencode.config}
-                />
-                <RuntimeConfigSourceBlock
-                  title="OpenWork runtime DB"
-                  description="OpenWork-managed runtime values stored outside workspace files."
-                  keys={props.configStatus.sources.runtimeDatabase.keys}
-                  config={props.configStatus.sources.runtimeDatabase.config}
-                />
-                <RuntimeConfigSourceBlock
-                  title="OpenWork injected config"
-                  description="The object OpenWork injects into OpenCode at runtime."
-                  keys={props.configStatus.sources.injected.keys}
-                  config={props.configStatus.sources.injected.config}
-                />
+                <div className="grid gap-3 xl:grid-cols-2">
+                  <RuntimeConfigSourceBlock
+                    title={t("settings.runtime_config_project_title")}
+                    description={t("settings.runtime_config_project_desc")}
+                    path={props.configStatus.sources.projectOpencode.path}
+                    exists={props.configStatus.sources.projectOpencode.exists}
+                    keys={props.configStatus.sources.projectOpencode.keys}
+                    config={props.configStatus.sources.projectOpencode.config}
+                  />
+                  <RuntimeConfigSourceBlock
+                    title={t("settings.runtime_config_global_title")}
+                    description={t("settings.runtime_config_global_desc")}
+                    path={props.configStatus.sources.globalOpencode.path}
+                    exists={props.configStatus.sources.globalOpencode.exists}
+                    keys={props.configStatus.sources.globalOpencode.keys}
+                    config={props.configStatus.sources.globalOpencode.config}
+                  />
+                  <RuntimeConfigSourceBlock
+                    title={t("settings.runtime_config_runtime_db_title")}
+                    description={t("settings.runtime_config_runtime_db_desc")}
+                    keys={props.configStatus.sources.runtimeDatabase.keys}
+                    config={props.configStatus.sources.runtimeDatabase.config}
+                  />
+                  <RuntimeConfigSourceBlock
+                    title={t("settings.runtime_config_injected_title")}
+                    description={t("settings.runtime_config_injected_desc")}
+                    keys={props.configStatus.sources.injected.keys}
+                    config={props.configStatus.sources.injected.config}
+                  />
+                </div>
               </div>
             ) : null}
-            <div>
-              <div className="font-medium text-gray-12">Runtime database</div>
-              <div>Stored keys: {formatKeys(props.configStatus.runtimeKeys)}</div>
+            <div className="grid gap-3 lg:grid-cols-3">
+              <div className="rounded-lg border border-gray-6 bg-gray-1 p-3">
+                <div className="font-medium text-gray-12">
+                  {t("settings.runtime_config_runtime_database")}
+                </div>
+                <div className="mt-1 text-[11px] text-gray-9">
+                  {t("settings.runtime_config_stored_keys", { keys: formatKeys(props.configStatus.runtimeKeys) })}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-6 bg-gray-1 p-3">
+                <div className="font-medium text-gray-12">
+                  {t("settings.runtime_config_legacy_metadata")}
+                </div>
+                <div className="mt-1 break-all font-mono text-[11px] text-gray-8">{props.configStatus.legacyOpenwork.path}</div>
+                {props.configStatus.legacyOpenwork.error ? (
+                  <div className="mt-1 text-[11px] text-amber-11">
+                    {t("settings.runtime_config_legacy_error_hint", { error: props.configStatus.legacyOpenwork.error })}
+                  </div>
+                ) : null}
+                <div className="mt-1 text-[11px] text-gray-9">
+                  {t("settings.runtime_config_migratable_keys", { keys: formatKeys(props.configStatus.legacyOpenwork.keys) })}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-6 bg-gray-1 p-3">
+                <div className="font-medium text-gray-12">
+                  {t("settings.runtime_config_user_opencode")}
+                </div>
+                <div className="mt-1 break-all font-mono text-[11px] text-gray-8">{props.configStatus.userOpencode.path}</div>
+                <div className="mt-1 text-[11px] text-gray-9">
+                  {props.configStatus.userOpencode.exists
+                    ? t("settings.runtime_config_found")
+                    : t("settings.runtime_config_not_found")}
+                </div>
+                <div className="text-[11px] text-gray-9">
+                  {t("settings.runtime_config_user_owned_keys", { keys: formatKeys(props.configStatus.userOpencode.keys) })}
+                </div>
+                <div className="text-[11px] text-gray-9">
+                  {t("settings.runtime_config_migratable_keys", { keys: formatKeys(props.configStatus.userOpencode.migratableKeys) })}
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="font-medium text-gray-12">Legacy OpenWork metadata</div>
-              <div className="break-all">{props.configStatus.legacyOpenwork.path}</div>
-              {props.configStatus.legacyOpenwork.error ? (
-                <div className="text-amber-11">{props.configStatus.legacyOpenwork.error}; fix this file before moving legacy config.</div>
-              ) : null}
-              <div>Migratable keys: {formatKeys(props.configStatus.legacyOpenwork.keys)}</div>
-            </div>
-            <div>
-              <div className="font-medium text-gray-12">User opencode.jsonc</div>
-              <div className="break-all">{props.configStatus.userOpencode.path}</div>
-              <div>{props.configStatus.userOpencode.exists ? "Found" : "Not found"}</div>
-              <div>User-owned keys: {formatKeys(props.configStatus.userOpencode.keys)}</div>
-              <div>Migratable keys: {formatKeys(props.configStatus.userOpencode.migratableKeys)}</div>
-            </div>
-            <div>
-              <div className="font-medium text-gray-12">Runtime DB JSON</div>
-              <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-gray-3 p-2 font-mono text-[11px] text-gray-11">
+            <details className="rounded-lg border border-gray-6 bg-gray-1 p-3">
+              <summary className="cursor-pointer font-medium text-gray-12">
+                {t("settings.runtime_config_runtime_db_json")}
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-gray-3 p-2 font-mono text-[11px] text-gray-11">
                 {JSON.stringify(props.configStatus.runtime, null, 2)}
               </pre>
-            </div>
+            </details>
           </div>
         ) : null}
       </LayoutSectionItem>
@@ -598,19 +739,19 @@ export function AdvancedFeatureFlagsSection(props: AdvancedFeatureFlagsSectionPr
   return (
     <LayoutSection>
       <LayoutSectionHeader>
-        <LayoutSectionTitle>Feature flags</LayoutSectionTitle>
-        <LayoutSectionDescription>Experimental controls for sandbox and workspace behaviors.</LayoutSectionDescription>
+        <LayoutSectionTitle>{t("settings.feature_flags_title")}</LayoutSectionTitle>
+        <LayoutSectionDescription>{t("settings.feature_flags_desc")}</LayoutSectionDescription>
       </LayoutSectionHeader>
 
       <LayoutSectionItem>
         <LayoutSectionItemHeader>
-          <LayoutSectionItemTitle>Create Sandbox uses microsandbox image</LayoutSectionItemTitle>
+          <LayoutSectionItemTitle>{t("settings.feature_flags_microsandbox_title")}</LayoutSectionItemTitle>
           <LayoutSectionItemDescription>
-            When enabled, Create Sandbox launches the detached worker with the microsandbox image flow instead of the default Docker image flow.
+            {t("settings.feature_flags_microsandbox_desc")}
           </LayoutSectionItemDescription>
           <LayoutSectionItemHeaderActions>
             <Switch
-              aria-label="Create Sandbox uses microsandbox image"
+              aria-label={t("settings.feature_flags_microsandbox_title")}
               checked={props.microsandboxCreateSandboxEnabled}
               disabled={props.busy || !isDesktopRuntime()}
               onCheckedChange={props.onToggleMicrosandboxCreateSandbox}

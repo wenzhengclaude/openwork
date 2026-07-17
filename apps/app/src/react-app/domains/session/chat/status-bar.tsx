@@ -312,7 +312,7 @@ export function StatusBar(props: StatusBarProps) {
                 onClick={openOpenWorkModels}
               >
                 <Sparkles className="size-3.5 text-blue-11" />
-                <span className="whitespace-nowrap">OpenWork Models</span>
+                <span className="whitespace-nowrap">Open One Models</span>
                 <span className="hidden whitespace-nowrap font-normal text-blue-11/75 lg:inline">
                   hosted frontier models
                 </span>
@@ -322,7 +322,7 @@ export function StatusBar(props: StatusBarProps) {
                 type="button"
                 className="flex size-6 shrink-0 items-center justify-center border-l border-blue-6/60 text-blue-11 transition-colors hover:bg-blue-3/70"
                 onClick={hideOpenWorkModels}
-                aria-label="Hide OpenWork Models hint"
+                aria-label="Hide Open One Models hint"
               >
                 <X className="size-3" />
               </button>

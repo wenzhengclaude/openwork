@@ -167,8 +167,8 @@ import { OLLAMA_PROVIDER_CONFIG, type LocalProviderInstallInput } from "@/react-
 import { CompanyLocalProviderDialog } from "@/react-app/domains/settings/company-local-provider-dialog";
 import {
   buildCompanyLocalProviderConfig,
-  COMPANY_LOCAL_PROVIDER_ID,
   COMPANY_LOCAL_PROVIDER_NAME,
+  resolveCompanyLocalProviderId,
   type CompanyLocalProviderInstallInput,
 } from "@/react-app/domains/settings/company-local-provider";
 
@@ -1089,6 +1089,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       throw new Error("请先检测并选择至少一个模型。");
     }
 
+    const providerId = resolveCompanyLocalProviderId(input.baseUrl);
+
     await openworkClient.patchConfig(workspaceId, {
       opencode: {
         provider: buildCompanyLocalProviderConfig(input),
@@ -1097,7 +1099,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     reloadCoordinator.markReloadRequired("config", { type: "config", name: "opencode.json", action: "updated" });
     await reloadEngineOrRestartDesktop(openworkClient, workspaceId);
     await opencodeClient.auth.set({
-      providerID: COMPANY_LOCAL_PROVIDER_ID,
+      providerID: providerId,
       auth: { type: "api", key: input.apiKey.trim() },
     });
     await providerAuthStore.refreshProviders({ dispose: true });
@@ -1610,7 +1612,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         }]
       : [],
   );
-  const mcpConnectedAppsCount = connectionsSnapshot.mcpServers.length;
+  const mcpConnectedAppsCount = connectionsSnapshot.mcpServers.filter(
+    (server) => connectionsSnapshot.mcpStatuses[server.name]?.status === "connected",
+  ).length;
+  useEffect(() => {
+    if (route.tab !== "extensions") return;
+    void extensionsStore.ensureCloudOrgSkillsFresh();
+  }, [extensionsStore, route.tab, route.extensionsSection]);
   const openworkCloudMcpUrl = connectionsSnapshot.mcpServers.find(
     (server) => server.name === "openwork-cloud",
   )?.config.url ?? null;
@@ -1993,8 +2001,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             onNavigateTab={(tab) => navigateSettingsPath(tab)}
             developerMode={developerMode}
             onSendFeedback={() => platform.openLink(buildFeedbackUrl({ entrypoint: "settings" }))}
-            onJoinDiscord={() => platform.openLink("https://discord.gg/VEhNQXxYMB")}
-            onReportIssue={() => platform.openLink("https://github.com/different-ai/openwork/issues/new?template=bug.yml")}
+            onJoinDiscord={() => platform.openLink(buildFeedbackUrl({ entrypoint: "settings-support" }))}
+            onReportIssue={() => platform.openLink("https://github.com/wenzhengclaude/openwork/issues/new")}
           />
         );
       case "permissions":
@@ -2124,6 +2132,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 void connectionsStore.refreshMcpServers();
               });
               void extensionsStore.refreshPlugins();
+              void extensionsStore.refreshCloudOrgSkills({ force: true });
               void extensionsStore.refreshCloudOrgMarketplaces({ force: true });
               void orgMcpConnections.refresh();
             }}
@@ -2161,9 +2170,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 }
                 readConfigFile={(scope) => connectionsStore.readMcpConfigFile(scope)}
                 installedSkills={extensionItems.installedSkills}
+                cloudSkills={extensionsStore.cloudOrgSkills()}
+                importedCloudSkills={extensionsStore.importedCloudSkills()}
                 installedPlugins={extensionItems.installedCloudPlugins}
                 installedOrgMcpItems={installedOrgMcpConnectionItems}
                 uninstallSkill={(name) => { void extensionsStore.uninstallSkill(name); }}
+                installCloudSkill={(skill) => extensionsStore.installCloudOrgSkill(skill)}
                 removeCloudPlugin={(pluginId) => { void extensionsStore.removeCloudOrgPlugin(pluginId); }}
                 orgMcpDisconnectingId={orgMcpConnections.disconnectingId}
                 disconnectOrgMcp={(connectionId) => { void orgMcpConnections.disconnect(connectionId); }}

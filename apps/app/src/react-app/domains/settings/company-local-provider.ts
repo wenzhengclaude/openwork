@@ -1,4 +1,5 @@
 export const COMPANY_LOCAL_PROVIDER_ID = "company-local";
+export const COMPANY_LOCAL_PROVIDER_ID_PREFIX = `${COMPANY_LOCAL_PROVIDER_ID}-`;
 export const COMPANY_LOCAL_PROVIDER_NAME = "\u516c\u53f8\u672c\u5730\u6a21\u578b";
 
 export type CompanyLocalProviderModel = {
@@ -21,8 +22,53 @@ export type CompanyLocalProviderInstallInput = {
 
 const COMPANY_LOCAL_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
 
+function providerUrlIdentity(baseUrl: string): string {
+  const trimmed = baseUrl.trim();
+  try {
+    const url = new URL(trimmed);
+    const path = url.pathname.replace(/\/+$/, "");
+    return `${url.protocol}//${url.host}${path}`;
+  } catch {
+    return trimmed;
+  }
+}
+
+function slugPart(value: string): string {
+  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "endpoint";
+}
+
+function stableHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function providerEndpointLabel(baseUrl: string): string {
+  return providerUrlIdentity(baseUrl);
+}
+
 function isKnownOpenAiReasoningModel(modelId: string): boolean {
   return /^gpt[-_.]?5(?:[-_.]|$)/i.test(modelId.trim());
+}
+
+export function isCompanyLocalProviderId(providerId: string): boolean {
+  const normalized = providerId.trim().toLowerCase();
+  return normalized === COMPANY_LOCAL_PROVIDER_ID || normalized.startsWith(COMPANY_LOCAL_PROVIDER_ID_PREFIX);
+}
+
+export function resolveCompanyLocalProviderId(baseUrl: string): string {
+  const identity = providerUrlIdentity(baseUrl);
+  const slug = slugPart(identity).slice(0, 48);
+  return `${COMPANY_LOCAL_PROVIDER_ID_PREFIX}${slug}-${stableHash(identity)}`;
+}
+
+export function resolveCompanyLocalProviderName(baseUrl: string): string {
+  const label = providerEndpointLabel(baseUrl);
+  return label ? `${COMPANY_LOCAL_PROVIDER_NAME} (${label})` : COMPANY_LOCAL_PROVIDER_NAME;
 }
 
 function normalizedModalities(model: Pick<CompanyLocalProviderModel, "modalities">) {
@@ -67,7 +113,7 @@ export function resolveCompanyLocalReasoningEffort(
   variant: string | null,
 ): string | undefined {
   const normalized = variant?.trim().toLowerCase();
-  if (providerId !== COMPANY_LOCAL_PROVIDER_ID || !isKnownOpenAiReasoningModel(modelId) || !normalized) return undefined;
+  if (!isCompanyLocalProviderId(providerId) || !isKnownOpenAiReasoningModel(modelId) || !normalized) return undefined;
   return COMPANY_LOCAL_REASONING_EFFORTS.some((effort) => effort === normalized)
     ? normalized
     : undefined;
@@ -128,9 +174,9 @@ export function buildCompanyLocalProviderConfig(input: Pick<CompanyLocalProvider
   );
 
   return {
-    [COMPANY_LOCAL_PROVIDER_ID]: {
+    [resolveCompanyLocalProviderId(input.baseUrl)]: {
       npm: "@ai-sdk/openai-compatible",
-      name: COMPANY_LOCAL_PROVIDER_NAME,
+      name: resolveCompanyLocalProviderName(input.baseUrl),
       options: { baseURL: input.baseUrl.trim() },
       models,
     },

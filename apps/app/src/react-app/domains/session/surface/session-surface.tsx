@@ -12,6 +12,8 @@ import { abortSessionSafe } from "@/app/lib/opencode-session";
 import { t } from "@/i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "@/app/cloud/import-state";
 import type {
+  OpenworkAgentRun,
+  OpenworkAgentRunMode,
   OpenworkServerClient,
   OpenworkSessionSnapshot,
 } from "@/app/lib/openwork-server";
@@ -33,7 +35,8 @@ import {
 } from "@/app/lib/app-inspector";
 import { useControlAction, type OpenworkControlAction } from "@/react-app/shell/control/control-provider";
 import { attemptSilentMcpReauth } from "@/react-app/domains/connections/mcp-silent-reauth";
-import { ReactSessionComposer } from "./composer/composer";
+import { ReactSessionComposer, type ComposerRunMode } from "./composer/composer";
+import { AgentRunTimeline } from "../agent-runs/agent-run-timeline";
 import { decodeComposerMentionValue, encodeComposerMentionValue, type ComposerMentionKind } from "./composer/mention-encoding";
 import { desktopBridge } from "@/app/lib/desktop";
 import { parseSlashCommandInvocation } from "./composer/slash-command";
@@ -437,6 +440,26 @@ function mergeDrafts(drafts: ComposerDraft[]): ComposerDraft | null {
   };
 }
 
+function toAgentRunMode(mode: ComposerRunMode): OpenworkAgentRunMode | null {
+  if (mode === "codex" || mode === "grok-build" || mode === "multi-agent") return mode;
+  return null;
+}
+
+function upsertAgentRunEvent(run: OpenworkAgentRun, event: OpenworkAgentRun["events"][number]): OpenworkAgentRun {
+  const events = run.events.some((item) => item.seq === event.seq)
+    ? run.events.map((item) => item.seq === event.seq ? event : item)
+    : [...run.events, event];
+  const status = event.type === "run_completed"
+    ? event.status === "failed" || event.status === "cancelled" ? event.status : "completed"
+    : run.status === "starting" ? "running" : run.status;
+  return {
+    ...run,
+    status,
+    updatedAt: event.timestamp,
+    events: events.sort((left, right) => left.seq - right.seq),
+  };
+}
+
 export function SessionSurface(props: SessionSurfaceProps) {
   const local = useLocal();
   const { config: shellConfig } = useShellConfig();
@@ -472,6 +495,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const prependQueuedDrafts = useComposerStateStore((state) => state.prependQueuedDrafts);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
+  const [runMode, setRunMode] = useState<ComposerRunMode>("opencode");
+  const [agentRuns, setAgentRuns] = useState<OpenworkAgentRun[]>([]);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
   const [rendered, setRendered] = useState<{ sessionId: string; snapshot: OpenworkSessionSnapshot } | null>(null);
@@ -482,6 +507,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [toolImportedPlugins, setToolImportedPlugins] = useState<CloudImportedPlugin[]>([]);
   const [verifiedOpenTargets, setVerifiedOpenTargets] = useState<OpenTarget[]>([]);
   const composerShellRef = useRef<HTMLDivElement>(null);
+  const agentRunControllersRef = useRef<Map<string, AbortController>>(new Map());
   const hydratedKeyRef = useRef<string | null>(null);
   const autoOpenedTargetRef = useRef<string | null>(null);
   const initializedAutoOpenSessionRef = useRef<string | null>(null);
@@ -596,10 +622,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
     cachedRendered: rendered,
   });
   const liveStatus = statusState ?? snapshot?.status ?? IDLE_STATUS;
-  const chatStreaming = sending || liveStatus.type === "busy" || liveStatus.type === "retry";
+  const activeAgentRun = agentRuns.find((run) => run.status === "starting" || run.status === "running") ?? null;
+  const agentRunActive = Boolean(activeAgentRun);
+  const chatStreaming = sending || agentRunActive || liveStatus.type === "busy" || liveStatus.type === "retry";
   const status = useMemo((): ThreadStatus => {
     if (sending) {
       return "submitted";
+    }
+
+    if (agentRunActive) {
+      return "streaming";
     }
 
     if (liveStatus.type === "busy") {
@@ -611,7 +643,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
 
     return "ready";
-  }, [liveStatus, sending]);
+  }, [agentRunActive, liveStatus, sending]);
   const renderedMessages = useMemo(
     () => deriveRenderedSessionMessages({ transcriptState, snapshot }),
     [snapshot, transcriptState],
@@ -779,6 +811,53 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
   };
 
+  const startAgentRun = useCallback(async (nextDraft: ComposerDraft, draftAttachments: ComposerAttachment[]) => {
+    const mode = toAgentRunMode(runMode);
+    if (!mode) return false;
+    if (nextDraft.mode !== "prompt" || nextDraft.command) {
+      throw new Error("Multi-agent runs support prompt tasks. Use OpenCode for shell and slash commands.");
+    }
+    if (draftAttachments.length > 0) {
+      throw new Error("Multi-agent runs do not support uploaded attachments yet. Use @file references or switch back to OpenCode.");
+    }
+    const promptText = (nextDraft.resolvedText ?? nextDraft.text).trim();
+    if (!promptText) return true;
+
+    const created = await props.client.createAgentRun(props.workspaceId, {
+      mode,
+      prompt: promptText,
+      model: props.selectedModel.modelID,
+    });
+    setAgentRuns((current) => [created.run, ...current.filter((run) => run.id !== created.run.id)].slice(0, 4));
+    const controller = new AbortController();
+    agentRunControllersRef.current.set(created.run.id, controller);
+    void props.client.streamAgentRunEvents(
+      props.workspaceId,
+      created.run.id,
+      (event) => {
+        setAgentRuns((current) => current.map((run) => run.id === event.runId ? upsertAgentRunEvent(run, event) : run));
+        if (event.type === "message_delta") {
+          useSessionActivityStore.getState().markAssistantOutput(props.workspaceId, props.sessionId, undefined, {
+            allowUnknownMessageRole: true,
+          });
+        }
+        if (event.type === "run_completed") {
+          const activeController = agentRunControllersRef.current.get(event.runId);
+          activeController?.abort();
+          agentRunControllersRef.current.delete(event.runId);
+          useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+        }
+      },
+      { signal: controller.signal },
+    ).catch((nextError) => {
+      if (controller.signal.aborted) return;
+      const message = nextError instanceof Error ? nextError.message : "Agent run stream failed.";
+      setError({ message });
+      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId, message);
+    });
+    return true;
+  }, [props.client, props.selectedModel.modelID, props.sessionId, props.workspaceId, runMode]);
+
   // Core sender shared by initial send and steered follow-ups. OpenCode
   // accepts follow-up user turns mid-run (steering) — the running loop picks
   // up the new message — so this is safe to call while the agent is busy.
@@ -790,7 +869,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setSending(true);
     setAwaitingAssistantBaseline(renderedMessages.length);
     try {
-      await props.onSendDraft(nextDraft, props.sessionId);
+      const handledByAgentRun = await startAgentRun(nextDraft, draftAttachments);
+      if (!handledByAgentRun) {
+        await props.onSendDraft(nextDraft, props.sessionId);
+      }
       draftAttachments.forEach(revokeAttachmentPreview);
       setSending(false);
     } catch (nextError) {
@@ -803,7 +885,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setSending(false);
       throw nextError;
     }
-  }, [appendComposerHistory, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
+  }, [appendComposerHistory, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft, startAgentRun]);
 
   const clearComposer = useCallback(() => {
     clearComposerSession(props.sessionId);
@@ -856,6 +938,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;
     setError(null);
+    if (activeAgentRun) {
+      await props.client.cancelAgentRun(props.workspaceId, activeAgentRun.id).catch((nextError) => {
+        setError({ message: nextError instanceof Error ? nextError.message : "Failed to stop agent run." });
+      });
+      agentRunControllersRef.current.get(activeAgentRun.id)?.abort();
+      agentRunControllersRef.current.delete(activeAgentRun.id);
+      setAgentRuns((current) => current.map((run) => run.id === activeAgentRun.id ? { ...run, status: "cancelled", updatedAt: Date.now() } : run));
+      useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+      return;
+    }
     // Stop means stop: drop queued follow-ups before aborting, otherwise the
     // queue-drain effect below re-prompts the agent the moment the abort
     // lands and the session reports idle (#2014).
@@ -875,7 +967,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
     }
     captureAnalyticsEvent("task_run_stopped", {});
     await snapshotQuery.refetch();
-  }, [chatStreaming, clearQueuedDrafts, opencodeClient, props.sessionId, props.workspaceRoot, snapshotQuery.refetch]);
+  }, [activeAgentRun, chatStreaming, clearQueuedDrafts, opencodeClient, props.client, props.sessionId, props.workspaceId, props.workspaceRoot, snapshotQuery.refetch]);
+
+  const handleCancelAgentRun = useCallback((runId: string) => {
+    void props.client.cancelAgentRun(props.workspaceId, runId).finally(() => {
+      agentRunControllersRef.current.get(runId)?.abort();
+      agentRunControllersRef.current.delete(runId);
+      setAgentRuns((current) => current.map((run) => run.id === runId ? { ...run, status: "cancelled", updatedAt: Date.now() } : run));
+      useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
+    });
+  }, [props.client, props.sessionId, props.workspaceId]);
 
   const handleDismissError = useCallback(() => {
     setError(null);
@@ -887,6 +988,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setSending(false);
     }
   }, [liveStatus.type]);
+
+  useEffect(() => () => {
+    for (const controller of agentRunControllersRef.current.values()) {
+      controller.abort();
+    }
+    agentRunControllersRef.current.clear();
+  }, [props.sessionId]);
 
   // Drain the queued follow-ups once the session goes idle. OpenCode has no
   // server-side queue, so we send everything that's queued as a single merged
@@ -1375,6 +1483,13 @@ export function SessionSurface(props: SessionSurfaceProps) {
           {/* Chat column: tighter than the composer (800px) so messages
                keep a comfortable reading width and don't feel "too big". */}
           <div ref={contentRef} className="mx-auto w-full max-w-[720px]">
+            {agentRuns.length > 0 ? (
+              <div className="space-y-3 pb-3">
+                {agentRuns.map((run) => (
+                  <AgentRunTimeline key={run.id} run={run} onCancel={handleCancelAgentRun} />
+                ))}
+              </div>
+            ) : null}
             {showDelayedLoading && pendingSessionLoad ? (
               <div className="px-6 py-16">
                 <div className="mx-auto max-w-sm rounded-3xl border border-dls-border bg-dls-hover/60 px-8 py-10 text-center">
@@ -1497,6 +1612,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         modelContextWindow={props.modelContextWindow}
         contextUsageTokens={contextUsageTokens}
         onModelVariantChange={props.onModelVariantChange}
+        runMode={runMode}
+        onRunModeChange={setRunMode}
         agentLabel={props.agentLabel}
         selectedAgent={props.selectedAgent}
         listAgents={props.listAgents}

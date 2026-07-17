@@ -509,6 +509,10 @@ export function getPluginsRoute(orgSlug?: string | null): string {
   return `${getOrgDashboardRoute(orgSlug)}/plugins`;
 }
 
+export function getSkillsRoute(orgSlug?: string | null): string {
+  return `${getOrgDashboardRoute(orgSlug)}/skills`;
+}
+
 export function getPluginRoute(orgSlug: string | null | undefined, pluginId: string): string {
   return `${getPluginsRoute(orgSlug)}/${encodeURIComponent(pluginId)}`;
 }
