@@ -1,6 +1,6 @@
 import { ApiError } from "../errors.js";
 import { AgentRunManager } from "../agent-runs/manager.js";
-import type { AgentRunMode, AgentRunSnapshot } from "../agent-runs/types.js";
+import type { AgentRunApprovalMode, AgentRunMode, AgentRunSnapshot } from "../agent-runs/types.js";
 import type { ServerConfig, TokenScope, WorkspaceInfo } from "../types.js";
 import { addRoute, type RequestContext, type Route } from "./registry.js";
 
@@ -37,11 +37,13 @@ export function registerAgentRunRoutes(options: RegisterAgentRunRoutesOptions): 
     const body = await readJsonBody(ctx.request);
     const prompt = readRequiredString(body, "prompt").slice(0, 120_000);
     const mode = readMode(body.mode);
+    const approvalMode = readApprovalMode(body.approvalMode);
     const model = typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
     const run = manager.start({
       workspaceId: workspace.id,
       workspacePath: workspace.path,
       mode,
+      approvalMode,
       prompt,
       model,
     });
@@ -81,6 +83,12 @@ function readRequiredString(body: Record<string, unknown>, key: string): string 
 function readMode(value: unknown): AgentRunMode {
   if (value === "codex" || value === "grok-build" || value === "multi-agent") return value;
   throw new ApiError(400, "invalid_payload", "mode must be codex, grok-build, or multi-agent");
+}
+
+function readApprovalMode(value: unknown): AgentRunApprovalMode {
+  if (value === undefined || value === null || value === "") return "auto-review";
+  if (value === "ask" || value === "auto-review" || value === "full-access" || value === "custom") return value;
+  throw new ApiError(400, "invalid_payload", "approvalMode must be ask, auto-review, full-access, or custom");
 }
 
 function requireRun(runId: string, workspaceId: string): AgentRunSnapshot {

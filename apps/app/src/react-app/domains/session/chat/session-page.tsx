@@ -2,13 +2,41 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
-import { ArrowLeft, ArrowRight, Cloud, Columns2, FileText, Globe, Mic2, Settings2, TextSearch, X, Zap } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  ArrowRight,
+  Braces,
+  ClipboardList,
+  Cloud,
+  Code2,
+  Columns2,
+  Copy,
+  ExternalLink,
+  FileText,
+  GitBranch,
+  Globe,
+  Hammer,
+  Hash,
+  Link,
+  Mic2,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
+  Settings2,
+  Terminal,
+  TextSearch,
+  X,
+  Zap,
+} from "lucide-react";
 
 import { TaskSuggestionVisual, taskSuggestionButtonClass } from "@/components/chat/task-suggestion-visuals";
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
 import { buildDenAuthUrl, readDenBootstrapConfig } from "../../../../app/lib/den";
-import { type OpenworkServerClient, type OpenworkServerStatus } from "../../../../app/lib/openwork-server";
+import { type OpenworkServerClient, type OpenworkServerStatus, type OpenworkSessionSnapshot } from "../../../../app/lib/openwork-server";
 import { getDisplaySessionTitle } from "../../../../app/lib/session-title";
 import type { BootPhase } from "../../../../app/lib/startup-boot";
 import { openDesktopPath, revealDesktopItemInDir, type WorkspaceInfo } from "../../../../app/lib/desktop";
@@ -22,7 +50,18 @@ import type {
 } from "../../../../app/types";
 import type { ShareWorkspaceModalProps } from "../../workspace/types";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogClose,
@@ -39,7 +78,10 @@ import ProviderAuthModal, { type ProviderAuthModalProps } from "../../connection
 import { RenameSessionModal } from "../modals/rename-session-modal";
 import { AppSidebar } from "../sidebar/app-sidebar";
 import { useSessionManagementStore } from "../sidebar/session-management-store";
+import { isSessionArchived } from "../sidebar/utils";
 import { SessionSurface, type SessionSurfaceProps } from "../surface/session-surface";
+import type { ComposerRunMode } from "../surface/composer/composer";
+import { dispatchComposerRunModeChange } from "../surface/composer/run-mode-events";
 import { useSessionFindStore } from "../surface/find-store";
 import {
   SidebarInset,
@@ -131,7 +173,10 @@ export type SessionPageSidebarProps = {
   onSelectWorkspace: (workspaceId: string) => Promise<boolean> | boolean | void;
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
-  onCreateTaskInWorkspace: (workspaceId: string) => void;
+  onCreateTaskInWorkspace: (
+    workspaceId: string,
+    options?: { open?: boolean; source?: string },
+  ) => Promise<string | null> | string | null | void;
   onCreateTaskWithPrompt?: (workspaceId: string, prompt: string) => void;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
@@ -294,6 +339,197 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
   }
 }
 
+const TOP_MENU_RUN_MODES: Array<{
+  value: ComposerRunMode;
+  label: string;
+  description: string;
+  icon: typeof Terminal;
+}> = [
+  {
+    value: "opencode",
+    label: "默认模式",
+    description: "使用 Open One 当前标准工作流。",
+    icon: Terminal,
+  },
+  {
+    value: "multi-agent",
+    label: "多智能体",
+    description: "并行运行 Codex 和 Grok Build。",
+    icon: GitBranch,
+  },
+  {
+    value: "codex",
+    label: "Codex",
+    description: "使用 Codex 原生子智能体。",
+    icon: Braces,
+  },
+  {
+    value: "grok-build",
+    label: "Grok Build",
+    description: "使用 Grok Build 原生子智能体。",
+    icon: Hammer,
+  },
+];
+
+function sessionSnapshotPartText(part: OpenworkSessionSnapshot["messages"][number]["parts"][number]) {
+  if ("text" in part && typeof part.text === "string") return part.text;
+  if ("toolName" in part && typeof part.toolName === "string") {
+    const label = `[tool:${part.toolName}]`;
+    if ("errorText" in part && typeof part.errorText === "string") return `${label} ${part.errorText}`;
+    if ("output" in part && part.output !== undefined) return `${label} ${safeJsonString(part.output)}`;
+    if ("input" in part && part.input !== undefined) return `${label} ${safeJsonString(part.input)}`;
+    return label;
+  }
+  return "";
+}
+
+function safeJsonString(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function sessionSnapshotTranscriptText(snapshot: OpenworkSessionSnapshot) {
+  return snapshot.messages
+    .flatMap((message) => {
+      const role = typeof message.info.role === "string" ? message.info.role : "message";
+      const body = message.parts
+        .flatMap((part) => {
+          const text = sessionSnapshotPartText(part).trim();
+          return text ? [text] : [];
+        })
+        .join("\n\n");
+      return body ? [`${role}\n${body}`] : [];
+    })
+    .join("\n\n---\n\n");
+}
+
+type SessionTaskActionsMenuProps = {
+  selectedSessionId: string | null;
+  isPinned: boolean;
+  isArchived: boolean;
+  canRename: boolean;
+  canArchive: boolean;
+  canDelete: boolean;
+  align: "start" | "end";
+  onTogglePin: (sessionId: string) => void;
+  onRename: (sessionId: string) => void;
+  onArchive: (sessionId: string, archived: boolean) => void;
+  onDelete: (sessionId: string) => void;
+  onOpenSideTask: () => void | Promise<void>;
+  onContinueWithRunMode: (mode: ComposerRunMode) => void;
+  onCopyLink: () => void;
+  onCopyTitle: () => void;
+  onCopyId: () => void;
+  onCopyTranscript: () => void | Promise<void>;
+  onOpenNewWindow: () => void;
+};
+
+function SessionTaskActionsMenu(props: SessionTaskActionsMenuProps) {
+  const sessionId = props.selectedSessionId;
+  if (!sessionId) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-7 shrink-0 rounded-xl text-gray-10 transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="任务操作"
+            title="任务操作"
+          >
+            <MoreHorizontal size={17} />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align={props.align} sideOffset={6} className="w-64">
+        <DropdownMenuItem onClick={() => props.onTogglePin(sessionId)}>
+          {props.isPinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+          {props.isPinned ? "取消置顶任务" : "置顶任务"}
+        </DropdownMenuItem>
+        {props.canRename ? (
+          <DropdownMenuItem onClick={() => props.onRename(sessionId)}>
+            <Pencil className="size-4" />
+            重命名任务
+          </DropdownMenuItem>
+        ) : null}
+        {props.canArchive ? (
+          <DropdownMenuItem onClick={() => props.onArchive(sessionId, !props.isArchived)}>
+            {props.isArchived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+            {props.isArchived ? "取消归档任务" : "归档任务"}
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => void props.onOpenSideTask()}>
+          <Columns2 className="size-4" />
+          打开侧边任务
+        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Code2 className="size-4" />
+            在...中继续
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-64">
+            {TOP_MENU_RUN_MODES.map((item) => {
+              const Icon = item.icon;
+              return (
+                <DropdownMenuItem key={item.value} onClick={() => props.onContinueWithRunMode(item.value)}>
+                  <Icon className="size-4" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{item.label}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                  </span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Copy className="size-4" />
+            复制
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-56">
+            <DropdownMenuItem onClick={props.onCopyLink}>
+              <Link className="size-4" />
+              复制任务链接
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={props.onCopyTitle}>
+              <ClipboardList className="size-4" />
+              复制任务标题
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={props.onCopyId}>
+              <Hash className="size-4" />
+              复制任务 ID
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void props.onCopyTranscript()}>
+              <FileText className="size-4" />
+              复制任务记录
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuItem onClick={props.onOpenNewWindow}>
+          <ExternalLink className="size-4" />
+          在新窗口中打开
+        </DropdownMenuItem>
+        {props.canDelete ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => props.onDelete(sessionId)}>
+              <X className="size-4" />
+              删除任务
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function controlObjectArg(args: unknown) {
   return args && typeof args === "object" && !Array.isArray(args) ? args : null;
 }
@@ -347,6 +583,7 @@ export function SessionPage(props: SessionPageProps) {
     [],
   );
   const voiceExtensionEnabled = voiceExtension ? isOpenWorkExtensionEnabled(voiceExtension) : false;
+  const pinnedSessionIds = useSessionManagementStore((state) => state.pinnedIds);
   const showCloudSignIn = shellConfig.cloudSignin && !denAuth.isSignedIn && denAuth.status !== "checking";
   const openCloudSignIn = useCallback(() => {
     const baseUrl = readDenBootstrapConfig().baseUrl;
@@ -685,6 +922,16 @@ export function SessionPage(props: SessionPageProps) {
     () => sessionTitleForId(props.sidebar.workspaceSessionGroups, props.selectedSessionId),
     [props.selectedSessionId, props.sidebar.workspaceSessionGroups],
   );
+  const selectedSessionRecord = useMemo(
+    () => props.sidebar.workspaceSessionGroups
+      .flatMap((group) => group.sessions)
+      .find((session) => session.id === props.selectedSessionId) ?? null,
+    [props.selectedSessionId, props.sidebar.workspaceSessionGroups],
+  );
+  const selectedSessionPinned = Boolean(
+    props.selectedSessionId && pinnedSessionIds.includes(props.selectedSessionId),
+  );
+  const selectedSessionArchived = selectedSessionRecord ? isSessionArchived(selectedSessionRecord) : false;
   useEffect(() => {
     if (pendingConversationHistoryNavigation) {
       if (
@@ -859,6 +1106,96 @@ export function SessionPage(props: SessionPageProps) {
     props.sidebar.onOpenSession(next.history.workspaceId, next.sessionId);
   }, [conversationHistory, props.selectedSessionId, props.selectedWorkspaceId, props.sidebar]);
 
+  const copyToClipboard = useCallback(async (text: string, label: string) => {
+    const value = text.trim();
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label}已复制`);
+    } catch (error) {
+      toast.error("复制失败", {
+        description: error instanceof Error ? error.message : "系统剪贴板不可用。",
+      });
+    }
+  }, []);
+
+  const copyCurrentTaskLink = useCallback(() => {
+    if (!props.selectedSessionId || typeof window === "undefined") return;
+    void copyToClipboard(window.location.href, "任务链接");
+  }, [copyToClipboard, props.selectedSessionId]);
+
+  const copyCurrentTaskId = useCallback(() => {
+    if (!props.selectedSessionId) return;
+    void copyToClipboard(props.selectedSessionId, "任务 ID");
+  }, [copyToClipboard, props.selectedSessionId]);
+
+  const copyCurrentTaskTitle = useCallback(() => {
+    const title = selectedSessionTitle || t("session.default_title");
+    void copyToClipboard(title, "任务标题");
+  }, [copyToClipboard, selectedSessionTitle]);
+
+  const copyCurrentTranscript = useCallback(async () => {
+    if (!props.openworkServerClient || !props.runtimeWorkspaceId || !props.selectedSessionId) return;
+    try {
+      const response = await props.openworkServerClient.getSessionSnapshot(
+        props.runtimeWorkspaceId,
+        props.selectedSessionId,
+        { limit: 200 },
+      );
+      const text = sessionSnapshotTranscriptText(response.item);
+      if (!text.trim()) {
+        toast.error("当前任务还没有可复制内容");
+        return;
+      }
+      await copyToClipboard(text, "任务记录");
+    } catch (error) {
+      toast.error("复制任务记录失败", {
+        description: error instanceof Error ? error.message : "无法读取当前任务记录。",
+      });
+    }
+  }, [copyToClipboard, props.openworkServerClient, props.runtimeWorkspaceId, props.selectedSessionId]);
+
+  const continueWithRunMode = useCallback((mode: ComposerRunMode) => {
+    if (!props.selectedSessionId) return;
+    dispatchComposerRunModeChange({
+      sessionId: props.selectedSessionId,
+      mode,
+      focus: true,
+    });
+    const item = TOP_MENU_RUN_MODES.find((entry) => entry.value === mode);
+    toast.success(`已切换到${item?.label ?? "运行模式"}`);
+  }, [props.selectedSessionId]);
+
+  const openCurrentTaskInNewWindow = useCallback(() => {
+    if (!props.selectedSessionId || typeof window === "undefined") return;
+    window.open(window.location.href, "_blank", "noopener,noreferrer");
+  }, [props.selectedSessionId]);
+
+  const openSideTask = useCallback(async () => {
+    if (!props.selectedWorkspaceId) return;
+    const currentSessionId = props.selectedSessionId;
+    const created = await Promise.resolve(
+      props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId, {
+        open: false,
+        source: "side_task",
+      }),
+    );
+    if (typeof created !== "string" || !created.trim()) {
+      toast.error("无法创建侧边任务");
+      return;
+    }
+    setSessionTabs((current) => {
+      const scoped = current.filter((tab) => tab.workspaceId === props.selectedWorkspaceId);
+      const withCurrent = currentSessionId && !scoped.some((tab) => tab.sessionId === currentSessionId)
+        ? [...scoped, { workspaceId: props.selectedWorkspaceId, sessionId: currentSessionId }]
+        : scoped;
+      if (withCurrent.some((tab) => tab.sessionId === created)) return withCurrent;
+      return [...withCurrent, { workspaceId: props.selectedWorkspaceId, sessionId: created }];
+    });
+    setSplitSessionId(created);
+    toast.success("侧边任务已打开");
+  }, [props.selectedSessionId, props.selectedWorkspaceId, props.sidebar]);
+
   useEffect(() => {
     if (!showSessionLoadingState) {
       setShowDelayedSessionLoadingState(false);
@@ -980,6 +1317,33 @@ export function SessionPage(props: SessionPageProps) {
                   ? t("session.create_or_connect_workspace")
                   : selectedSessionTitle || t("session.default_title")}
               </h1>
+              <div className="mac:titlebar-no-drag">
+                <SessionTaskActionsMenu
+                  selectedSessionId={props.selectedSessionId}
+                  isPinned={selectedSessionPinned}
+                  isArchived={selectedSessionArchived}
+                  canRename={Boolean(props.onRenameSession)}
+                  canArchive={Boolean(props.onArchiveSession)}
+                  canDelete={Boolean(props.onDeleteSession)}
+                  align="start"
+                  onTogglePin={(sessionId) => useSessionManagementStore.getState().togglePin(sessionId)}
+                  onRename={openRenameModal}
+                  onArchive={(sessionId, archived) => {
+                    void props.onArchiveSession?.(sessionId, archived);
+                  }}
+                  onDelete={(sessionId) => {
+                    setSessionActionId(sessionId);
+                    setDeleteOpen(true);
+                  }}
+                  onOpenSideTask={openSideTask}
+                  onContinueWithRunMode={continueWithRunMode}
+                  onCopyLink={copyCurrentTaskLink}
+                  onCopyTitle={copyCurrentTaskTitle}
+                  onCopyId={copyCurrentTaskId}
+                  onCopyTranscript={copyCurrentTranscript}
+                  onOpenNewWindow={openCurrentTaskInNewWindow}
+                />
+              </div>
               <span className="hidden truncate text-[13px] text-dls-secondary lg:inline">
                 {workspaceName}
               </span>

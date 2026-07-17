@@ -1,12 +1,12 @@
 import { containsNeedle, extractText, isJsonObject, readNestedString, readString, type JsonObject, type JsonValue, StdioJsonRpcClient } from "../json-rpc.js";
 import { resolveGrokCommand, resolveRuntimeEnv } from "../runtime-config.js";
-import type { AgentRunEmitter, AgentRunInput, AgentRuntime } from "../types.js";
+import type { AgentRunApprovalMode, AgentRunEmitter, AgentRunInput, AgentRuntime } from "../types.js";
 
 export class GrokBuildRuntime implements AgentRuntime {
   readonly kind = "grok-build";
 
   async run(input: AgentRunInput, emit: AgentRunEmitter, signal: AbortSignal): Promise<void> {
-    const command = resolveGrokCommand(input.model);
+    const command = resolveGrokCommand(input.model, input.approvalMode);
     const client = new StdioJsonRpcClient({
       command: command.command,
       args: command.args,
@@ -24,9 +24,7 @@ export class GrokBuildRuntime implements AgentRuntime {
           title: message.method,
           status: "running",
         });
-        if (message.method.includes("request_permission")) {
-          return autoSelectPermission(message.params);
-        }
+        if (message.method.includes("request_permission")) return permissionResponse(input.approvalMode, message.params);
         const response: JsonObject = {};
         return response;
       },
@@ -187,8 +185,25 @@ function inferStatus(value: JsonValue | undefined): "pending" | "running" | "com
   return "running";
 }
 
+function permissionResponse(approvalMode: AgentRunApprovalMode, value: JsonValue | undefined): JsonObject {
+  if (approvalMode === "auto-review" || approvalMode === "full-access") return autoSelectPermission(value);
+  return rejectPermission(value);
+}
+
 function autoSelectPermission(value: JsonValue | undefined): JsonObject {
   const optionId = selectPermissionOption(value);
+  if (!optionId) return {};
+  return {
+    outcome: {
+      selected: {
+        optionId,
+      },
+    },
+  };
+}
+
+function rejectPermission(value: JsonValue | undefined): JsonObject {
+  const optionId = selectRejectPermissionOption(value);
   if (!optionId) return {};
   return {
     outcome: {
@@ -214,4 +229,22 @@ function selectPermissionOption(value: JsonValue | undefined): string {
   }
   const first = options[0];
   return first ? readString(first, "optionId") || readString(first, "option_id") : "";
+}
+
+function selectRejectPermissionOption(value: JsonValue | undefined): string {
+  if (!isJsonObject(value) || !Array.isArray(value.options)) return "";
+  const options = value.options.filter(isJsonObject);
+  const preferred = ["opt-reject-once", "reject-once", "opt-reject", "reject", "deny", "cancel"];
+  for (const id of preferred) {
+    if (options.some((option) => readString(option, "optionId") === id || readString(option, "option_id") === id)) {
+      return id;
+    }
+  }
+  for (const option of options) {
+    const kind = readString(option, "kind").toLowerCase();
+    if (kind.includes("reject") || kind.includes("deny") || kind.includes("cancel")) {
+      return readString(option, "optionId") || readString(option, "option_id");
+    }
+  }
+  return "";
 }

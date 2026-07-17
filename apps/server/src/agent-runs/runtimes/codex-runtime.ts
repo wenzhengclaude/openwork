@@ -1,6 +1,6 @@
 import { containsNeedle, extractText, isJsonObject, readNestedString, readString, type JsonObject, type JsonValue, StdioJsonRpcClient } from "../json-rpc.js";
 import { resolveCodexCommand, resolveRuntimeEnv } from "../runtime-config.js";
-import type { AgentRunEmitter, AgentRunInput, AgentRuntime } from "../types.js";
+import type { AgentRunApprovalMode, AgentRunEmitter, AgentRunInput, AgentRuntime } from "../types.js";
 
 export class CodexRuntime implements AgentRuntime {
   readonly kind = "codex";
@@ -31,12 +31,7 @@ export class CodexRuntime implements AgentRuntime {
           title: approvalTitle(message.method),
           status: "running",
         });
-        if (message.method.includes("requestApproval")) {
-          const response: JsonObject = { decision: "accept" };
-          return response;
-        }
-        const response: JsonObject = {};
-        return response;
+        return codexApprovalResponse(input.approvalMode, message.method, message.params);
       },
       onNotification: (message) => {
         this.handleNotification(message.method, message.params, emit);
@@ -66,14 +61,7 @@ export class CodexRuntime implements AgentRuntime {
         },
       });
       client.notify("initialized");
-      const thread = await client.request("thread/start", {
-        cwd: input.workspacePath,
-        ephemeral: true,
-        approvalPolicy: "never",
-        sandbox: "workspaceWrite",
-        runtimeWorkspaceRoots: [input.workspacePath],
-        ...(input.model ? { model: input.model } : {}),
-      });
+      const thread = await client.request("thread/start", codexThreadStartParams(input));
       const threadId = resolveThreadId(thread);
       if (!threadId) {
         throw new Error("Codex app-server did not return a thread id");
@@ -136,6 +124,61 @@ export class CodexRuntime implements AgentRuntime {
       if (text) emit({ type: "message_delta", runtime: this.kind, agentId: "codex", text });
     }
   }
+}
+
+function codexThreadStartParams(input: AgentRunInput): JsonObject {
+  const params: JsonObject = {
+    cwd: input.workspacePath,
+    ephemeral: true,
+    runtimeWorkspaceRoots: [input.workspacePath],
+  };
+  if (input.model) params.model = input.model;
+
+  if (input.approvalMode === "full-access") {
+    params.approvalPolicy = "never";
+    params.approvalsReviewer = "user";
+    params.sandbox = "danger-full-access";
+    return params;
+  }
+
+  params.approvalPolicy = "on-request";
+  params.approvalsReviewer = input.approvalMode === "auto-review" ? "auto_review" : "user";
+
+  if (input.approvalMode === "custom") {
+    const permissionsProfile = process.env.OPENONE_CODEX_PERMISSIONS_PROFILE?.trim() || ":workspace";
+    params.permissions = permissionsProfile;
+    return params;
+  }
+
+  params.sandbox = "workspace-write";
+  return params;
+}
+
+function codexApprovalResponse(
+  approvalMode: AgentRunApprovalMode,
+  method: string,
+  params: JsonValue | undefined,
+): JsonObject {
+  if (method === "item/permissions/requestApproval") {
+    return codexPermissionApprovalResponse(approvalMode, params);
+  }
+  if (method === "mcpServer/elicitation/request") {
+    return { action: "decline", content: null };
+  }
+  if (!method.includes("requestApproval")) return {};
+  if (approvalMode === "full-access") return { decision: "acceptForSession" };
+  if (approvalMode === "auto-review") return { decision: "accept" };
+  return { decision: "decline" };
+}
+
+function codexPermissionApprovalResponse(approvalMode: AgentRunApprovalMode, params: JsonValue | undefined): JsonObject {
+  if ((approvalMode === "auto-review" || approvalMode === "full-access") && isJsonObject(params) && isJsonObject(params.permissions)) {
+    return {
+      scope: approvalMode === "full-access" ? "session" : "turn",
+      permissions: params.permissions,
+    };
+  }
+  return { scope: "turn", permissions: {} };
 }
 
 function collaborativePrompt(prompt: string): string {

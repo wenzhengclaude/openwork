@@ -79,6 +79,8 @@ describe("openwork runtime config file", () => {
     const agent = parsed.agent as Record<string, { prompt?: string }>;
     const prompt = agent.openwork?.prompt ?? "";
 
+    expect(prompt).toContain("You are Open One.");
+    expect(prompt).not.toContain("You are OpenWork.");
     // The new Memory Bank section is present and distinct from the existing ## Memory section.
     expect(prompt).toContain("## Memory Bank");
     expect(prompt).toContain("## Memory\n");

@@ -26,6 +26,7 @@ export class AgentRunManager {
         id,
         workspaceId: input.workspaceId,
         mode: input.mode,
+        approvalMode: input.approvalMode,
         status: "starting",
         prompt: input.prompt,
         model: input.model ?? null,

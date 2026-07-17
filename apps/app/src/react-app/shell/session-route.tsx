@@ -646,8 +646,14 @@ export function SessionRoute() {
       ),
   );
   const hasUsableModel = Boolean(local.prefs.defaultModel && !selectedModelUnavailable);
+  const selectedWorkspaceCanCreateSession = selectedWorkspace?.workspaceType === "remote" || Boolean(selectedWorkspaceRoot.trim());
   const canCreateTask = Boolean(
-    opencodeClient && selectedWorkspaceId && !loading && !selectedWorkspaceError && !selectedModelUnavailable,
+    opencodeClient &&
+      selectedWorkspaceId &&
+      selectedWorkspaceCanCreateSession &&
+      !loading &&
+      !selectedWorkspaceError &&
+      !selectedModelUnavailable,
   );
 
   const openWorkModelsPromo = useOpenWorkModelsStartupPromo({
@@ -856,6 +862,9 @@ export function SessionRoute() {
       onSendDraft: async (draft: ComposerDraft, sessionId: string) => {
         const targetSessionId = sessionId.trim() || selectedSessionId;
         if (!targetSessionId) return;
+        if (selectedWorkspace?.workspaceType !== "remote" && !selectedWorkspaceRoot.trim()) {
+          throw new Error("请先为本地工作区选择文件夹，然后再开始对话。");
+        }
         const text = (draft.resolvedText ?? draft.text).trim();
         if (!text && draft.attachments.length === 0) return;
         // One-shot provider selection on the first send whenever no user-added
@@ -1211,7 +1220,10 @@ export function SessionRoute() {
   );
 
 
-  const handleCreateTaskInWorkspace = useCallback(async (workspaceId: string): Promise<string | null> => {
+  const handleCreateTaskInWorkspace = useCallback(async (
+    workspaceId: string,
+    options?: { open?: boolean; source?: string },
+  ): Promise<string | null> => {
     const workspace = workspaces.find((item) => item.id === workspaceId);
     if (
       !workspace ||
@@ -1220,30 +1232,39 @@ export function SessionRoute() {
     ) {
       return null;
     }
+    const workspaceDirectory = workspace.path?.trim() || workspace.directory?.trim() || "";
+    if (workspace.workspaceType !== "remote" && !workspaceDirectory) {
+      toast.error("请先为本地工作区选择文件夹", {
+        description: "会话需要绑定一个工作目录，才能安全读取文件、运行命令和保存上下文。",
+      });
+      return null;
+    }
     const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
     if (!endpoint || !endpoint.token) {
       return null;
     }
     const workspaceClient = createClient(
       endpoint.opencodeBaseUrl,
-      workspace.path?.trim() || undefined,
+      workspaceDirectory || undefined,
       { token: endpoint.token, mode: "openwork" },
     );
     try {
       setErrorsByWorkspaceId((current) => ({ ...current, [workspaceId]: null }));
       setRouteError(null);
       const session = unwrap(
-        await workspaceClient.session.create({ directory: workspace.path?.trim() || undefined }),
+        await workspaceClient.session.create({ directory: workspaceDirectory || undefined }),
       );
       captureAnalyticsEvent("task_created", {
-        source: "new_task",
+        source: options?.source ?? "new_task",
         workspace_type: workspace.workspaceType ?? "unknown",
       });
       toast.dismiss(taskCreateUnavailableToastId(workspaceId));
       toast.dismiss();
       setLegacySelectedWorkspaceId(workspaceId);
       writeActiveWorkspaceId(workspaceId || null);
-      writeLastSessionFor(workspaceId, session.id);
+      if (options?.open !== false) {
+        writeLastSessionFor(workspaceId, session.id);
+      }
       rememberPendingCreatedSession(workspaceId, session.id);
       setSessionsByWorkspaceId((current) => {
         const next = {
@@ -1253,8 +1274,10 @@ export function SessionRoute() {
         sessionsByWorkspaceIdRef.current = next;
         return next;
       });
-      navigateToWorkspaceSession(workspaceId, session.id);
-      focusPromptSoon();
+      if (options?.open !== false) {
+        navigateToWorkspaceSession(workspaceId, session.id);
+        focusPromptSoon();
+      }
       void refreshRouteState();
       return session.id;
     } catch (error) {
@@ -2090,23 +2113,28 @@ export function SessionRoute() {
           navigateToWorkspaceSession(workspaceId, sessionId);
         },
         onPrefetchSession: () => {},
-        onCreateTaskInWorkspace: (workspaceId) => {
-          void handleCreateTaskInWorkspace(workspaceId);
-        },
+        onCreateTaskInWorkspace: (workspaceId, options) => handleCreateTaskInWorkspace(workspaceId, options),
         onCreateTaskWithPrompt: (workspaceId, prompt) => {
           void (async () => {
             const workspace = workspaces.find((item) => item.id === workspaceId);
             if (!workspace) return;
+            const workspaceDirectory = workspace.path?.trim() || workspace.directory?.trim() || "";
+            if (workspace.workspaceType !== "remote" && !workspaceDirectory) {
+              toast.error("请先为本地工作区选择文件夹", {
+                description: "会话需要绑定一个工作目录，才能安全读取文件、运行命令和保存上下文。",
+              });
+              return;
+            }
             const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
             if (!endpoint?.token) return;
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
-              workspace.path?.trim() || undefined,
+              workspaceDirectory || undefined,
               { token: endpoint.token, mode: "openwork" },
             );
             try {
               const session = unwrap(
-                await workspaceClient.session.create({ directory: workspace.path?.trim() || undefined }),
+                await workspaceClient.session.create({ directory: workspaceDirectory || undefined }),
               );
               saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
               writeActiveWorkspaceId(workspaceId || null);

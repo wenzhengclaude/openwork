@@ -2,6 +2,8 @@ export type AgentRuntimeKind = "codex" | "grok-build";
 
 export type AgentRunMode = AgentRuntimeKind | "multi-agent";
 
+export type AgentRunApprovalMode = "ask" | "auto-review" | "full-access" | "custom";
+
 export type AgentRunStatus = "starting" | "running" | "completed" | "cancelled" | "failed";
 
 export type AgentRunEventType =
@@ -37,6 +39,7 @@ export type AgentRunInput = {
   workspaceId: string;
   workspacePath: string;
   mode: AgentRunMode;
+  approvalMode: AgentRunApprovalMode;
   prompt: string;
   model?: string;
 };
@@ -45,6 +48,7 @@ export type AgentRunSnapshot = {
   id: string;
   workspaceId: string;
   mode: AgentRunMode;
+  approvalMode: AgentRunApprovalMode;
   status: AgentRunStatus;
   prompt: string;
   model: string | null;

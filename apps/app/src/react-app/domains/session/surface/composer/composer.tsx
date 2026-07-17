@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { AppWindowMac, ArrowUp, Braces, Check, ChevronDown, ChevronRight, FileText, Gauge, GitBranch, Hammer, ListPlus, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
+import { AppWindowMac, ArrowUp, Braces, Check, ChevronDown, ChevronRight, FileText, Gauge, GitBranch, Hammer, Hand, ListPlus, Paperclip, Plug, Plus, Settings, ShieldAlert, ShieldCheck, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { toast } from "@/components/ui/sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -20,7 +20,7 @@ import { LexicalPromptEditor, type LexicalPromptEditorHandle } from "./editor";
 import { listRunningAppsForMention } from "./app-mentions";
 import type { ComposerMentionKind } from "./mention-encoding";
 import { getSlashCommandQuery } from "./slash-command";
-import type { OpenworkAgentRunMode } from "@/app/lib/openwork-server";
+import type { OpenworkAgentApprovalMode, OpenworkAgentRunMode } from "@/app/lib/openwork-server";
 
 type MentionItem = {
   id: string;
@@ -78,6 +78,8 @@ type ComposerProps = {
   onModelVariantChange: (value: string | null) => void;
   runMode: ComposerRunMode;
   onRunModeChange: (value: ComposerRunMode) => void;
+  approvalMode: OpenworkAgentApprovalMode;
+  onApprovalModeChange: (value: OpenworkAgentApprovalMode) => void;
   agentLabel: string;
   selectedAgent: string | null;
   listAgents: () => Promise<Agent[]>;
@@ -147,6 +149,38 @@ const RUN_MODE_ITEMS: Array<{ value: ComposerRunMode; label: string; shortLabel:
   },
 ];
 
+const APPROVAL_MODE_ITEMS: Array<{
+  value: OpenworkAgentApprovalMode;
+  label: string;
+  shortLabel: string;
+  description: string;
+}> = [
+  {
+    value: "auto-review",
+    label: "替我审批",
+    shortLabel: "替我审批",
+    description: "由 Codex/Grok 自己审查权限请求后继续执行。",
+  },
+  {
+    value: "ask",
+    label: "请求批准",
+    shortLabel: "请求批准",
+    description: "不自动放行外部文件、命令或网络权限请求。",
+  },
+  {
+    value: "full-access",
+    label: "完全访问",
+    shortLabel: "完全访问",
+    description: "不受限制地访问文件和网络，适合可信工作区。",
+  },
+  {
+    value: "custom",
+    label: "自定义",
+    shortLabel: "自定义",
+    description: "使用配置文件中的权限策略，默认保持保守。",
+  },
+];
+
 function formatContextTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)}M`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
@@ -201,8 +235,19 @@ function RunModeIcon({ mode, className }: { mode: ComposerRunMode; className?: s
   return <Terminal size={14} className={className} />;
 }
 
+function ApprovalModeIcon({ mode, className }: { mode: OpenworkAgentApprovalMode; className?: string }) {
+  if (mode === "ask") return <Hand size={14} className={className} />;
+  if (mode === "full-access") return <ShieldAlert size={14} className={className} />;
+  if (mode === "custom") return <SlidersHorizontal size={14} className={className} />;
+  return <ShieldCheck size={14} className={className} />;
+}
+
 function runModeLabel(mode: ComposerRunMode) {
   return RUN_MODE_ITEMS.find((item) => item.value === mode)?.shortLabel ?? "默认";
+}
+
+function approvalModeLabel(mode: OpenworkAgentApprovalMode) {
+  return APPROVAL_MODE_ITEMS.find((item) => item.value === mode)?.shortLabel ?? "替我审批";
 }
 
 /**
@@ -364,6 +409,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const [runModeMenuOpen, setRunModeMenuOpen] = useState(false);
+  const [approvalModeMenuOpen, setApprovalModeMenuOpen] = useState(false);
   const [commands, setCommands] = useState<SlashCommandOption[]>([]);
   const [commandsLoading, setCommandsLoading] = useState(false);
   const [skillsLoading, setSkillsLoading] = useState(false);
@@ -407,6 +453,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const editorRef = useRef<LexicalPromptEditorHandle | null>(null);
   const agentMenuRef = useRef<HTMLDivElement | null>(null);
   const runModeMenuRef = useRef<HTMLDivElement | null>(null);
+  const approvalModeMenuRef = useRef<HTMLDivElement | null>(null);
   // IME composition guard: while an IME composition is active, we must not
   // treat Enter as a submit. Three signals keep this reliable across WebKit,
   // Chrome, and Safari: event.isComposing, event.keyCode === 229, and the
@@ -481,6 +528,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   const mentionQuery = mentionMatch?.[1] ?? "";
   const nonDefaultAgents = useMemo(() => agents.filter(isNonDefaultAgent), [agents]);
   const showAgentPicker = props.runMode === "opencode" && (props.selectedAgent !== null || nonDefaultAgents.length > 0);
+  const approvalModeApplies = props.runMode !== "opencode";
 
   useEffect(() => {
     setSlashOpen(slashOpenNext);
@@ -707,6 +755,20 @@ export function ReactSessionComposer(props: ComposerProps) {
       window.removeEventListener("mousedown", handlePointerDown);
     };
   }, [runModeMenuOpen]);
+
+  useEffect(() => {
+    if (!approvalModeMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (approvalModeMenuRef.current?.contains(target)) return;
+      setApprovalModeMenuOpen(false);
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [approvalModeMenuOpen]);
 
   useEffect(() => {
     if (!toolMenuOpen) return;
@@ -973,7 +1035,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     // Escape-to-stop while the agent is busy. Only when no menu is open so
     // Escape can still close menus. First press arms a confirmation prompt
     // for 3s; a second Escape within that window stops the agent.
-    const anyMenuOpen = agentMenuOpen || toolMenuOpen || Boolean(activeMenu);
+    const anyMenuOpen = agentMenuOpen || runModeMenuOpen || approvalModeMenuOpen || toolMenuOpen || Boolean(activeMenu);
     if (event.key === "Escape" && props.busy && !anyMenuOpen) {
       event.preventDefault();
       if (escapeArmed) {
@@ -1408,20 +1470,6 @@ export function ReactSessionComposer(props: ComposerProps) {
                     event.currentTarget.value = "";
                   }}
                 />
-                <button
-                  type="button"
-                  className={`inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-3 ${
-                    !props.attachmentsEnabled ? "cursor-not-allowed opacity-60" : ""
-                  }`}
-                  onClick={() => {
-                    if (!props.attachmentsEnabled) return;
-                    fileInput?.click();
-                  }}
-                  disabled={!props.attachmentsEnabled}
-                  title={props.attachmentsDisabledReason ?? t("composer.attach_files")}
-                >
-                  <Paperclip size={16} />
-                </button>
                 <div
                   ref={toolMenuRef}
                   className="relative"
@@ -1432,7 +1480,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 >
                   <button
                     type="button"
-                    className={`inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-md transition-colors ${toolMenuOpen ? "bg-gray-3 text-gray-12" : "text-gray-10 hover:bg-gray-3"}`}
+                    className={`inline-flex size-9 items-center justify-center rounded-md transition-colors ${toolMenuOpen ? "bg-gray-3 text-gray-12" : "text-gray-10 hover:bg-gray-3 hover:text-gray-12"}`}
                     onClick={() => {
                       setMentionOpen(false);
                       setMentionItems([]);
@@ -1442,13 +1490,34 @@ export function ReactSessionComposer(props: ComposerProps) {
                     aria-expanded={toolMenuOpen}
                     aria-haspopup="dialog"
                     title={t("composer.tools_label")}
+                    aria-label={t("composer.tools_label")}
+                    data-testid="composer-add-menu-button"
                   >
-                    <Plug size={16} />
+                    <Plus size={22} strokeWidth={1.7} />
                   </button>
                   {toolMenuOpen ? (
                     <div className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-[22px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                       <div className="grid grid-cols-[152px_minmax(0,1fr)] sm:grid-cols-[176px_minmax(0,1fr)]">
                         <div className="border-r border-dls-border bg-gray-2/30 p-2">
+                          <button
+                            type="button"
+                            className={`mb-1 flex w-full items-center gap-2.5 rounded-[16px] px-3 py-2.5 text-left text-sm transition-colors ${
+                              props.attachmentsEnabled
+                                ? "text-gray-11 hover:bg-gray-2"
+                                : "cursor-not-allowed text-gray-9 opacity-60"
+                            }`}
+                            onClick={() => {
+                              if (!props.attachmentsEnabled) return;
+                              setToolMenuOpen(false);
+                              fileInput?.click();
+                            }}
+                            disabled={!props.attachmentsEnabled}
+                            title={props.attachmentsDisabledReason ?? t("composer.attach_files")}
+                          >
+                            <Paperclip size={15} className="shrink-0 text-gray-9" />
+                            <span className="truncate">{t("composer.attach_files")}</span>
+                          </button>
+                          <div className="my-2 border-t border-dls-border" />
                           {([
                             ["agents", t("composer.agents_label")],
                             ["commands", t("dashboard.commands")],
@@ -1665,7 +1734,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                   <button
                     type="button"
                     className="flex h-9 max-h-9 items-center gap-1.5 rounded-md px-1.5 text-[12px] font-medium text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
-                    onClick={() => setRunModeMenuOpen((value) => !value)}
+                    onClick={() => {
+                      setRunModeMenuOpen((value) => !value);
+                      setApprovalModeMenuOpen(false);
+                    }}
                     disabled={props.busy}
                     aria-expanded={runModeMenuOpen}
                     title="运行模式"
@@ -1704,6 +1776,68 @@ export function ReactSessionComposer(props: ComposerProps) {
                                 <span className="min-w-0">
                                   <span className="block truncate font-semibold">{item.label}</span>
                                   <span className="mt-0.5 block text-gray-10">{item.description}</span>
+                                </span>
+                              </span>
+                              {active ? <Check size={14} className="mt-1 shrink-0 text-gray-10" /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div ref={approvalModeMenuRef} className="relative">
+                  <button
+                    type="button"
+                    className={`flex h-9 max-h-9 items-center gap-1.5 rounded-md px-1.5 text-[12px] font-medium transition-colors hover:bg-gray-3 hover:text-gray-12 ${approvalModeApplies ? "text-gray-10" : "text-gray-9"}`}
+                    onClick={() => {
+                      setApprovalModeMenuOpen((value) => !value);
+                      setRunModeMenuOpen(false);
+                    }}
+                    disabled={props.busy}
+                    aria-expanded={approvalModeMenuOpen}
+                    title={approvalModeApplies ? "审批模式" : "审批模式用于 Codex、Grok Build 和多智能体"}
+                  >
+                    <ApprovalModeIcon mode={props.approvalMode} className={approvalModeApplies ? "text-gray-10" : "text-gray-8"} />
+                    <span className="max-w-[88px] truncate">{approvalModeLabel(props.approvalMode)}</span>
+                    <ChevronDown size={13} />
+                  </button>
+                  {approvalModeMenuOpen ? (
+                    <div className="absolute left-0 bottom-full z-40 mb-2 w-80 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                      <div className="border-b border-dls-border px-3 pb-2 pt-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-10">审批模式</div>
+                        {!approvalModeApplies ? (
+                          <div className="mt-1 text-[11px] leading-snug text-gray-9">
+                            默认模式继续使用 OpenCode 原有审批流；此处用于 Codex、Grok Build 和多智能体。
+                          </div>
+                        ) : null}
+                      </div>
+                      <div
+                        role="presentation"
+                        className="max-h-72 space-y-1 overflow-y-auto p-2"
+                        onMouseDown={(event) => event.preventDefault()}
+                      >
+                        {APPROVAL_MODE_ITEMS.map((item) => {
+                          const active = props.approvalMode === item.value;
+                          return (
+                            <button
+                              key={item.value}
+                              type="button"
+                              className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-xs transition-colors ${active ? "bg-gray-2 text-gray-12" : "text-gray-11 hover:bg-gray-2/70"}`}
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                props.onApprovalModeChange(item.value);
+                                setApprovalModeMenuOpen(false);
+                              }}
+                            >
+                              <span className="flex min-w-0 items-start gap-2.5">
+                                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-white text-gray-11 shadow-sm">
+                                  <ApprovalModeIcon mode={item.value} />
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate font-semibold">{item.label}</span>
+                                  <span className="mt-0.5 block leading-snug text-gray-10">{item.description}</span>
                                 </span>
                               </span>
                               {active ? <Check size={14} className="mt-1 shrink-0 text-gray-10" /> : null}
@@ -1894,15 +2028,17 @@ export function ReactSessionComposer(props: ComposerProps) {
                     type="button"
                     onClick={canSend ? props.onSend : undefined}
                     disabled={props.disabled || !canSend}
-                    className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-full px-4 text-[13px] font-medium transition-colors ${
+                    className={`inline-flex size-11 items-center justify-center rounded-full transition-colors ${
                       !canSend || props.disabled
-                        ? "bg-gray-4 text-gray-10"
-                        : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
+                        ? "bg-gray-4 text-gray-9"
+                        : "bg-gray-12 text-gray-1 shadow-sm hover:bg-gray-11"
                     }`}
                     title={t("composer.run_task")}
+                    aria-label={t("composer.run_task")}
+                    data-testid="composer-send-button"
                   >
-                    <ArrowUp size={15} />
-                    <span>{t("composer.run_task")}</span>
+                    <ArrowUp size={21} strokeWidth={2} />
+                    <span className="sr-only">{t("composer.run_task")}</span>
                   </button>
                 )}
               </div>

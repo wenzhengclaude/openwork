@@ -12,6 +12,7 @@ import { abortSessionSafe } from "@/app/lib/opencode-session";
 import { t } from "@/i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "@/app/cloud/import-state";
 import type {
+  OpenworkAgentApprovalMode,
   OpenworkAgentRun,
   OpenworkAgentRunMode,
   OpenworkServerClient,
@@ -36,6 +37,7 @@ import {
 import { useControlAction, type OpenworkControlAction } from "@/react-app/shell/control/control-provider";
 import { attemptSilentMcpReauth } from "@/react-app/domains/connections/mcp-silent-reauth";
 import { ReactSessionComposer, type ComposerRunMode } from "./composer/composer";
+import { SET_COMPOSER_RUN_MODE_EVENT } from "./composer/run-mode-events";
 import { AgentRunTimeline } from "../agent-runs/agent-run-timeline";
 import { decodeComposerMentionValue, encodeComposerMentionValue, type ComposerMentionKind } from "./composer/mention-encoding";
 import { desktopBridge } from "@/app/lib/desktop";
@@ -77,6 +79,7 @@ import {
 } from "./composer-state-store";
 import { MessageList } from "@/components/chat/message-list";
 import { MessageListProvider, type DispatchAction } from "@/components/chat/message-list-provider";
+import { ConversationTimeline } from "@/components/chat/conversation-timeline";
 import { OpenTargetProvider, type OpenTargetOptions } from "@/lib/target-provider";
 import type { ThreadStatus } from "@/lib/messages";
 import {
@@ -445,6 +448,10 @@ function toAgentRunMode(mode: ComposerRunMode): OpenworkAgentRunMode | null {
   return null;
 }
 
+function isComposerRunMode(value: unknown): value is ComposerRunMode {
+  return value === "opencode" || value === "multi-agent" || value === "codex" || value === "grok-build";
+}
+
 function upsertAgentRunEvent(run: OpenworkAgentRun, event: OpenworkAgentRun["events"][number]): OpenworkAgentRun {
   const events = run.events.some((item) => item.seq === event.seq)
     ? run.events.map((item) => item.seq === event.seq ? event : item)
@@ -496,6 +503,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
   const [runMode, setRunMode] = useState<ComposerRunMode>("opencode");
+  const [approvalMode, setApprovalMode] = useState<OpenworkAgentApprovalMode>("auto-review");
   const [agentRuns, setAgentRuns] = useState<OpenworkAgentRun[]>([]);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
@@ -546,6 +554,25 @@ export function SessionSurface(props: SessionSurfaceProps) {
     if (!currentSnapshot) return;
     setRendered({ sessionId: props.sessionId, snapshot: currentSnapshot });
   }, [props.sessionId, currentSnapshot]);
+
+  useEffect(() => {
+    const handleRunModeEvent = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail = event.detail;
+      const detailObject = detail && typeof detail === "object" ? detail : null;
+      const sessionId = detailObject ? Reflect.get(detailObject, "sessionId") : "";
+      if (typeof sessionId !== "string" || sessionId !== props.sessionId) return;
+      const mode = detailObject ? Reflect.get(detailObject, "mode") : null;
+      if (!isComposerRunMode(mode)) return;
+      setRunMode(mode);
+      const focus = detailObject ? Reflect.get(detailObject, "focus") : false;
+      if (focus === true) {
+        window.dispatchEvent(new Event("openwork:focusPrompt"));
+      }
+    };
+    window.addEventListener(SET_COMPOSER_RUN_MODE_EVENT, handleRunModeEvent);
+    return () => window.removeEventListener(SET_COMPOSER_RUN_MODE_EVENT, handleRunModeEvent);
+  }, [props.sessionId]);
 
   useEffect(() => {
     hydratedKeyRef.current = null;
@@ -825,6 +852,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
     const created = await props.client.createAgentRun(props.workspaceId, {
       mode,
+      approvalMode,
       prompt: promptText,
       model: props.selectedModel.modelID,
     });
@@ -856,7 +884,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId, message);
     });
     return true;
-  }, [props.client, props.selectedModel.modelID, props.sessionId, props.workspaceId, runMode]);
+  }, [approvalMode, props.client, props.selectedModel.modelID, props.sessionId, props.workspaceId, runMode]);
 
   // Core sender shared by initial send and steered follow-ups. OpenCode
   // accepts follow-up user turns mid-run (steering) — the running loop picks
@@ -1559,6 +1587,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
             )}
           </div>
         </div>
+        <ConversationTimeline
+          messages={renderedMessages}
+          scrollRef={scrollRef}
+          contentRef={contentRef}
+        />
         <SessionScrollOverlay
           sessionId={props.sessionId}
           isStreaming={chatStreaming}
@@ -1614,6 +1647,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
         onModelVariantChange={props.onModelVariantChange}
         runMode={runMode}
         onRunModeChange={setRunMode}
+        approvalMode={approvalMode}
+        onApprovalModeChange={setApprovalMode}
         agentLabel={props.agentLabel}
         selectedAgent={props.selectedAgent}
         listAgents={props.listAgents}

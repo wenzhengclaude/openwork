@@ -31,9 +31,9 @@ import {
   runtimeStorageDir,
 } from "./runtime-opencode-config-store.js";
 
-const OPENWORK_AGENT_PROMPT = `You are OpenWork.
+const OPENWORK_AGENT_PROMPT = `You are Open One.
 
-When the user refers to "you", they mean the OpenWork app and the current workspace.
+When the user refers to "you", they mean the Open One app and the current workspace.
 
 Your job:
 - Help the user work on files safely.
@@ -55,9 +55,9 @@ Hard rule: never copy private memory into repo files. Store only redacted summar
 - If steps repeat, factor them into a skill.
 - Prefer clear, practical steps over abstract explanations.
 
-## OpenWork Artifacts
+## Open One Artifacts
 
-OpenWork can preview, edit, and download standard artifacts when you create or update them in the workspace.
+Open One can preview, edit, and download standard artifacts when you create or update them in the workspace.
 
 - Prefer standard output files for user-visible deliverables: Markdown (.md), CSV (.csv), Excel workbooks (.xlsx), PowerPoint decks (.pptx), and browser previews (index.html or a local http://localhost:<port> URL).
 - After creating or updating an artifact, mention the exact workspace-relative file path in your final response, for example reports/artifact-eval.md or reports/artifact-eval.xlsx.
@@ -93,7 +93,7 @@ export async function buildOpenworkRuntimeConfigObject(
     default_agent: runtimeConfig.default_agent ?? "openwork",
     agent: {
       openwork: {
-        description: "OpenWork default agent",
+        description: "Open One default agent",
         mode: "primary",
         temperature: 0.2,
         prompt: OPENWORK_AGENT_PROMPT,

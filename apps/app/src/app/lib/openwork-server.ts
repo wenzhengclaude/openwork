@@ -560,6 +560,8 @@ export type OpenworkSessionGroupEvent = {
 
 export type OpenworkAgentRunMode = "codex" | "grok-build" | "multi-agent";
 
+export type OpenworkAgentApprovalMode = "ask" | "auto-review" | "full-access" | "custom";
+
 export type OpenworkAgentRuntimeKind = "codex" | "grok-build";
 
 export type OpenworkAgentRunStatus = "starting" | "running" | "completed" | "cancelled" | "failed";
@@ -597,6 +599,7 @@ export type OpenworkAgentRun = {
   id: string;
   workspaceId: string;
   mode: OpenworkAgentRunMode;
+  approvalMode: OpenworkAgentApprovalMode;
   status: OpenworkAgentRunStatus;
   prompt: string;
   model: string | null;
@@ -1333,7 +1336,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         { token, hostToken },
       );
     },
-    createAgentRun: (workspaceId: string, payload: { mode: OpenworkAgentRunMode; prompt: string; model?: string }) =>
+    createAgentRun: (workspaceId: string, payload: { mode: OpenworkAgentRunMode; approvalMode?: OpenworkAgentApprovalMode; prompt: string; model?: string }) =>
       requestJson<{ run: OpenworkAgentRun }>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/agent-runs`,

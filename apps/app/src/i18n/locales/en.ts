@@ -1723,4 +1723,10 @@ export default {
   "settings.feature_flags_desc": "Experimental controls for sandbox and workspace behaviors.",
   "settings.feature_flags_microsandbox_title": "Create Sandbox uses microsandbox image",
   "settings.feature_flags_microsandbox_desc": "When enabled, Create Sandbox launches the detached worker with the microsandbox image flow instead of the default Docker image flow.",
+  "timeline.tool_call": "Tool call",
+  "timeline.tool_calls": "{value} tool calls",
+  "timeline.attached_file": "Attached file",
+  "timeline.attached_files": "{value} attached files",
+  "timeline.user_message": "User message",
+  "timeline.agent_message": "Agent message",
 } as const;
