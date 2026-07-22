@@ -601,6 +601,7 @@ async function cloudPluginDb(config: ServerConfig): Promise<CloudPluginDb> {
 function skillNameFromInstallPath(path: string): string | null {
   return path.match(/^\.opencode\/plugins\/[^/]+\/skills\/([^/]+)\/SKILL\.md$/)?.[1]
     ?? path.match(/^\.opencode\/skills\/[^/]+\/([^/]+)\/SKILL\.md$/)?.[1]
+    ?? path.match(/^\.opencode\/skills\/([^/]+)\/SKILL\.md$/)?.[1]
     ?? null;
 }
 
@@ -657,6 +658,10 @@ async function writePluginWorkspaceFile(workspaceRoot: string, path: string, con
 async function removePluginWorkspaceFile(workspaceRoot: string, path: string): Promise<void> {
   if (!path.startsWith(".opencode/")) return;
   const absolutePath = resolveWorkspaceInstallPath(workspaceRoot, path);
+  if (/^\.opencode\/skills\/[^/]+\/SKILL\.md$/.test(path)) {
+    await rm(dirname(absolutePath), { recursive: true, force: true });
+    return;
+  }
   if (/^\.opencode\/skills\/[^/]+\/[^/]+\/SKILL\.md$/.test(path)) {
     await rm(dirname(absolutePath), { recursive: true, force: true });
     return;

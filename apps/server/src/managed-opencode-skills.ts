@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
@@ -140,6 +140,8 @@ export async function syncManagedOpenCodeSkills(workspaceRoot: string): Promise<
       await rm(join(skillsDir, namespace, "shared"), { recursive: true, force: true });
     }
   }
+  await removeUnusedLegacyNamespacedSharedDirs(root, skillsDir, manifest, nextSkills, removed);
+  await removeLegacyPluginSharedMirrors(root, skillsDir, pluginsDir, removed);
 
   await writeManifest(manifestPath, { version: 1, skills: nextSkills });
   return { written, removed, conflicts };
@@ -243,9 +245,7 @@ function skillSource(
   pluginRootDir: string | null,
   pluginSharedDir: string | null,
 ): PluginSkillSource {
-  const targetBaseDir = namespace ? join(skillsDir, namespace) : skillsDir;
-  const targetDir = join(targetBaseDir, name);
-  const targetSharedDir = namespace && pluginSharedDir ? join(targetBaseDir, "shared") : null;
+  const targetDir = join(skillsDir, name);
   return {
     name,
     namespace,
@@ -254,7 +254,7 @@ function skillSource(
     sourceRelativeSkillPath: toWorkspaceRelativePath(root, sourceSkillPath),
     pluginRootDir,
     pluginSharedDir,
-    targetSharedDir,
+    targetSharedDir: null,
     targetDir,
     targetSkillPath: join(targetDir, "SKILL.md"),
     targetRelativeSkillPath: toWorkspaceRelativePath(root, join(targetDir, "SKILL.md")),
@@ -377,6 +377,52 @@ async function syncPluginSharedDirectory(source: PluginSkillSource): Promise<voi
   await rm(source.targetSharedDir, { recursive: true, force: true });
   await mkdir(dirname(source.targetSharedDir), { recursive: true });
   await cp(source.pluginSharedDir, source.targetSharedDir, { recursive: true });
+}
+
+async function removeUnusedLegacyNamespacedSharedDirs(
+  root: string,
+  skillsDir: string,
+  manifest: ManagedSkillManifest,
+  nextSkills: Record<string, ManagedSkillEntry>,
+  removed: string[],
+): Promise<void> {
+  const nextNamespaces = new Set<string>();
+  for (const entry of Object.values(nextSkills)) {
+    const namespace = managedSkillNamespace(entry.targetPath);
+    if (namespace) nextNamespaces.add(namespace);
+  }
+  const previousNamespaces = new Set<string>();
+  for (const entry of Object.values(manifest.skills)) {
+    const namespace = managedSkillNamespace(entry.targetPath);
+    if (namespace) previousNamespaces.add(namespace);
+  }
+  for (const namespace of previousNamespaces) {
+    if (nextNamespaces.has(namespace)) continue;
+    const sharedDir = join(skillsDir, namespace, "shared");
+    if (await exists(sharedDir)) {
+      await rm(sharedDir, { recursive: true, force: true });
+      removed.push(toWorkspaceRelativePath(root, sharedDir));
+    }
+    await rmdir(join(skillsDir, namespace)).catch(() => undefined);
+  }
+}
+
+async function removeLegacyPluginSharedMirrors(
+  root: string,
+  skillsDir: string,
+  pluginsDir: string,
+  removed: string[],
+): Promise<void> {
+  if (!(await exists(skillsDir)) || !(await exists(pluginsDir))) return;
+  const pluginEntries = await readDirectories(pluginsDir);
+  for (const pluginEntry of pluginEntries) {
+    const sharedDir = join(skillsDir, pluginEntry.name, "shared");
+    if (await exists(sharedDir)) {
+      await rm(sharedDir, { recursive: true, force: true });
+      removed.push(toWorkspaceRelativePath(root, sharedDir));
+    }
+    await rmdir(join(skillsDir, pluginEntry.name)).catch(() => undefined);
+  }
 }
 
 async function listDirectoryFiles(dir: string): Promise<string[]> {

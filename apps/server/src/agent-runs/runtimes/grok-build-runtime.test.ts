@@ -185,7 +185,7 @@ describe("GrokBuildRuntime", () => {
     process.env.OPENONE_GROK_ARGS = JSON.stringify([scriptPath]);
     process.env.OPENONE_AGENT_MCP_PROBE_TIMEOUT_MS = "0";
 
-    const skillDir = join(dir, ".opencode", "skills", "sap-dev-core-plugin", "sap-login");
+    const skillDir = join(dir, ".opencode", "skills", "sap-login");
     const skillPath = join(skillDir, "SKILL.md");
     await mkdir(skillDir, { recursive: true });
     await writeFile(skillPath, "# sap-login\n\nUse SAP GUI Login from Open One.\n", "utf8");
@@ -219,7 +219,7 @@ describe("GrokBuildRuntime", () => {
           },
           {
             name: "sap-sm30",
-            path: join(dir, ".opencode", "skills", "sap-dev-core-plugin", "sap-sm30", "SKILL.md"),
+            path: join(dir, ".opencode", "skills", "sap-sm30", "SKILL.md"),
             description: "Maintain customizing views",
             scope: "project",
             trigger: "/sap-sm30",

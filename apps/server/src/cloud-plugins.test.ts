@@ -114,7 +114,7 @@ describe("cloud plugin installs", () => {
       expect(installed.marketplaces.marketplace_1?.pluginIds).toEqual(["plugin_1"]);
 
       const skillPath = join(root, ".opencode", "plugins", "creative-brief-plugin", "skills", "brief-builder", "SKILL.md");
-      const materializedSkillPath = join(root, ".opencode", "skills", "creative-brief-plugin", "brief-builder", "SKILL.md");
+      const materializedSkillPath = join(root, ".opencode", "skills", "brief-builder", "SKILL.md");
       expect(await readFile(skillPath, "utf8")).toContain("OWP_BRIEF_TEST_TOKEN");
       expect(await readFile(materializedSkillPath, "utf8")).toContain("OWP_BRIEF_TEST_TOKEN");
       expect((await readRuntimeOpencodeConfig(config, WORKSPACE_ID)).mcp?.brief).toMatchObject({

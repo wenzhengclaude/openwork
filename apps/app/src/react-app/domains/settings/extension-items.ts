@@ -143,7 +143,8 @@ function childKeysForPlugin(plugin: CloudImportedPlugin) {
     }
     if (file.objectType === "skill") {
       skillPaths.add(file.path);
-      const name = file.path.match(/^\.opencode\/skills\/(?:[^/]+\/)?([^/]+)\/SKILL\.md$/)?.[1];
+      const name = file.path.match(/^\.opencode\/plugins\/[^/]+\/skills\/([^/]+)\/SKILL\.md$/)?.[1]
+        ?? file.path.match(/^\.opencode\/skills\/(?:[^/]+\/)?([^/]+)\/SKILL\.md$/)?.[1];
       if (name) skillNames.add(name);
       skillNames.add(file.title);
     }

@@ -175,7 +175,7 @@ describe("CodexRuntime", () => {
     process.env.OPENONE_CODEX_COMMAND = process.execPath;
     process.env.OPENONE_CODEX_ARGS = JSON.stringify([scriptPath]);
 
-    const skillDir = join(dir, ".opencode", "skills", "sap-dev-core-plugin", "sap-login");
+    const skillDir = join(dir, ".opencode", "skills", "sap-login");
     const skillPath = join(skillDir, "SKILL.md");
     await mkdir(skillDir, { recursive: true });
     await writeFile(skillPath, "# sap-login\n\nUse SAP GUI Login from Open One.\n", "utf8");
@@ -204,7 +204,7 @@ describe("CodexRuntime", () => {
           },
           {
             name: "sap-sm30",
-            path: join(dir, ".opencode", "skills", "sap-dev-core-plugin", "sap-sm30", "SKILL.md"),
+            path: join(dir, ".opencode", "skills", "sap-sm30", "SKILL.md"),
             description: "Maintain customizing views",
             scope: "project",
             trigger: "/sap-sm30",
@@ -221,11 +221,9 @@ describe("CodexRuntime", () => {
     expect(payload).toEqual({
       extraRoots: [
         join(dir, ".opencode", "skills"),
-        join(dir, ".opencode", "skills", "sap-dev-core-plugin"),
       ],
       selectedCapabilityRoots: [
         codexSelectedRoot(join(dir, ".opencode", "skills")),
-        codexSelectedRoot(join(dir, ".opencode", "skills", "sap-dev-core-plugin")),
       ],
       promptHasBroadSkillList: false,
       promptHasCodexSkillMarker: true,
