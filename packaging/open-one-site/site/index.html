@@ -1,114 +1,118 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101c25" />
-    <title>Open One | 团队智能体工作台</title>
+    <meta name="theme-color" content="#eef4f2" />
+    <title>Open One | Download</title>
     <link rel="icon" href="/assets/open-one-mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="Open One 首页">
-        <img src="/assets/open-one-mark.svg" alt="" />
-        <span>Open One</span>
-      </a>
-      <div class="header-actions">
-        <span class="release-status"><i aria-hidden="true"></i>内部发布通道</span>
-        <a href="http://10.10.16.164:13005">组织控制台</a>
-      </div>
-    </header>
+    <main class="page-shell" aria-labelledby="download-title">
+      <section class="control-room" aria-label="Open One control plane">
+        <div class="grid-layer" aria-hidden="true"></div>
+        <div class="wash-layer" aria-hidden="true"></div>
+        <span class="axis axis-x" aria-hidden="true"></span>
+        <span class="axis axis-y" aria-hidden="true"></span>
 
-    <main>
-      <section class="hero" aria-labelledby="open-one-title">
-        <div class="hero-copy">
-          <p class="eyebrow">OPEN ONE DESKTOP</p>
-          <h1 id="open-one-title">让智能体成为团队的日常工作方式。</h1>
-          <p class="lead">
-            Open One 将企业模型、Skill、MCP 与本地工作区带到同一个桌面应用中，让每位成员都能安全地完成复杂任务。
-          </p>
-          <div class="download-actions">
-            <a class="download-button" href="/Open-One-Setup.exe">
-              <img src="/assets/icons/download.svg" alt="" />
-              下载 Windows 版
+        <div class="control-content">
+          <header class="brand-row">
+            <a class="brand" href="/" aria-label="Open One home">
+              <img src="/assets/open-one-mark.svg" alt="" />
+              <span>
+                <strong>Open One Control</strong>
+                <small>Local-first command center</small>
+              </span>
             </a>
-            <a class="text-button" href="http://10.10.16.164:13005">打开组织控制台 <img src="/assets/icons/arrow.svg" alt="" /></a>
-          </div>
-          <div class="hero-meta" aria-label="桌面端能力">
-            <span><i></i>Windows 10/11 · 64 位</span>
-            <span>应用内稳定更新</span>
-          </div>
-        </div>
+            <span class="scope-pill"><i aria-hidden="true"></i>Org scoped</span>
+          </header>
 
-        <div class="hero-visual" aria-label="Open One 桌面应用预览">
-          <div class="visual-topline">
-            <span class="visual-live"><i></i>工作区已就绪</span>
-            <span>OPEN ONE / DESKTOP</span>
+          <div class="hero-copy">
+            <p class="eyebrow">Control plane for agent work</p>
+            <h1>Bring every agent under one roof.</h1>
+            <p>
+              Route local files, team MCP connections, cloud workers, and model policy through one shared workspace.
+            </p>
           </div>
-          <div class="product-frame">
-            <img src="/assets/open-one-desktop.png" alt="Open One 桌面应用界面" />
+
+          <div class="workspace-grid">
+            <section class="routes-panel" aria-label="Workspace routes">
+              <div class="panel-title">
+                <strong>Workspace routes</strong>
+                <span>Live</span>
+              </div>
+              <div class="route-list">
+                <div class="route-row">
+                  <span class="route-icon"><img src="/assets/icons/workflow.svg" alt="" /></span>
+                  <span><strong>Desktop runtime</strong><small>Keeps file work local.</small></span>
+                  <b>Local</b>
+                </div>
+                <div class="route-row">
+                  <span class="route-icon"><img src="/assets/icons/model.svg" alt="" /></span>
+                  <span><strong>MCP connections</strong><small>Shared by workspace policy.</small></span>
+                  <b>Scoped</b>
+                </div>
+                <div class="route-row">
+                  <span class="route-icon"><img src="/assets/icons/agent.svg" alt="" /></span>
+                  <span><strong>Cloud workers</strong><small>Run handoffs in the background.</small></span>
+                  <b>Queued</b>
+                </div>
+              </div>
+            </section>
+
+            <section class="policy-panel" aria-label="Policy lane">
+              <div class="policy-title">
+                <img src="/assets/icons/workflow.svg" alt="" />
+                <strong>Policy lane</strong>
+              </div>
+              <ol>
+                <li><span>1</span>Approve</li>
+                <li><span>2</span>Connect</li>
+                <li><span>3</span>Run</li>
+              </ol>
+              <p>Same workspace rules, whether work starts from the app or the cloud.</p>
+            </section>
           </div>
-          <div class="signal-layer" aria-hidden="true">
-            <span class="signal-line signal-line-one"></span>
-            <span class="signal-line signal-line-two"></span>
-            <div class="signal-chip signal-chip-agent">
-              <img src="/assets/icons/agent.svg" alt="" />
-              <span>智能体</span>
-              <b>运行中</b>
-            </div>
-            <div class="signal-chip signal-chip-model">
-              <img src="/assets/icons/model.svg" alt="" />
-              <span>企业模型</span>
-              <b>已连接</b>
-            </div>
-            <div class="signal-chip signal-chip-flow">
-              <img src="/assets/icons/workflow.svg" alt="" />
-              <span>团队工作流</span>
-            </div>
+
+          <div class="status-grid" aria-label="Release status">
+            <span><small>Auth</small><strong>SSO ready</strong></span>
+            <span><small>Tools</small><strong>Per member</strong></span>
+            <span><small>Models</small><strong>Governed</strong></span>
           </div>
         </div>
       </section>
 
-      <section class="capabilities" aria-label="Open One 能力">
-        <article>
-          <span class="capability-icon capability-icon-green"><img src="/assets/icons/workflow.svg" alt="" /></span>
-          <div>
-            <span class="number">01</span>
-            <h2>统一的团队工作流</h2>
-            <p>把模型、工具和可复用技能集中管理，并按组织策略分发给成员。</p>
-          </div>
-        </article>
-        <article>
-          <span class="capability-icon capability-icon-blue"><img src="/assets/icons/model.svg" alt="" /></span>
-          <div>
-            <span class="number">02</span>
-            <h2>接入企业模型</h2>
-            <p>支持公司 OpenAI 兼容接口，每个账号仅显示自己被授权的模型。</p>
-          </div>
-        </article>
-        <article>
-          <span class="capability-icon capability-icon-gold"><img src="/assets/icons/shield.svg" alt="" /></span>
-          <div>
-            <span class="number">03</span>
-            <h2>可控的桌面发布</h2>
-            <p>通过稳定发布通道统一升级，兼顾本地文件权限与团队级配置。</p>
-          </div>
-        </article>
-      </section>
-
-      <section class="release-band" aria-label="下载 Open One">
+      <section class="download-panel" aria-label="Download Open One">
         <div>
-          <p class="eyebrow">READY FOR YOUR TEAM</p>
-          <h2>下载后即可进入你的组织工作区。</h2>
+          <p class="eyebrow">Desktop</p>
+          <h2 id="download-title">Download Open One.</h2>
+          <p class="download-copy">
+            Install the Windows desktop app with the latest workspace, skill, MCP, and model routing updates.
+          </p>
         </div>
-        <a class="release-download" href="/Open-One-Setup.exe">获取 Windows 安装包 <img src="/assets/icons/arrow.svg" alt="" /></a>
+
+        <div class="version-box">
+          <span>Current release</span>
+          <strong>0.17.32</strong>
+        </div>
+
+        <a class="download-button" href="/Open-One-Setup.exe">
+          <img src="/assets/icons/download.svg" alt="" />
+          Download Windows installer
+        </a>
+
+        <a class="console-link" href="http://10.10.16.164:13005">
+          Open organization console
+          <img src="/assets/icons/arrow.svg" alt="" />
+        </a>
+
+        <dl class="download-facts">
+          <div><dt>Platform</dt><dd>Windows 10/11 · 64-bit</dd></div>
+          <div><dt>Channel</dt><dd>Internal distribution</dd></div>
+          <div><dt>Updates</dt><dd>Managed in app</dd></div>
+        </dl>
       </section>
     </main>
-
-    <footer>
-      <span>Open One · Internal distribution</span>
-      <span>Windows desktop release channel</span>
-    </footer>
   </body>
 </html>
