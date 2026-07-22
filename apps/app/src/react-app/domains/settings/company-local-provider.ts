@@ -8,6 +8,7 @@ export type CompanyLocalProviderModel = {
   contextWindow?: number;
   outputLimit?: number;
   reasoning?: boolean;
+  reasoningEfforts?: string[];
   modalities?: {
     input: string[];
     output: string[];
@@ -20,7 +21,7 @@ export type CompanyLocalProviderInstallInput = {
   models: CompanyLocalProviderModel[];
 };
 
-const COMPANY_LOCAL_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
+const DEFAULT_COMPANY_LOCAL_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
 
 function providerUrlIdentity(baseUrl: string): string {
   const trimmed = baseUrl.trim();
@@ -51,8 +52,8 @@ function providerEndpointLabel(baseUrl: string): string {
   return providerUrlIdentity(baseUrl);
 }
 
-function isKnownOpenAiReasoningModel(modelId: string): boolean {
-  return /^gpt[-_.]?5(?:[-_.]|$)/i.test(modelId.trim());
+function isKnownImageInputModel(modelId: string): boolean {
+  return /(?:^|[-_./])(?:qwen(?:[-_.]?\d+(?:[-_.]\d+)?)?[-_.]?vl|llava|internvl|minicpm[-_.]?v|glm[-_.]?4v|gpt[-_.]?4o|gpt[-_.]?5(?:[-_.]\d+)?|vision|multimodal)(?:[-_./]|$)/i.test(modelId.trim());
 }
 
 export function isCompanyLocalProviderId(providerId: string): boolean {
@@ -81,12 +82,24 @@ function normalizedModalities(model: Pick<CompanyLocalProviderModel, "modalities
   };
 }
 
-export function companyLocalModelSupportsReasoning(model: Pick<CompanyLocalProviderModel, "id" | "reasoning">): boolean {
-  return model.reasoning === true || (model.reasoning !== false && isKnownOpenAiReasoningModel(model.id));
+function normalizeReasoningEffort(value: string): string {
+  return value.trim().toLowerCase().replace(/[_\s]+/g, "-");
 }
 
-export function companyLocalModelSupportsImageInput(model: Pick<CompanyLocalProviderModel, "modalities">): boolean {
-  return normalizedModalities(model)?.input.includes("image") ?? false;
+export function companyLocalReasoningEfforts(model: Pick<CompanyLocalProviderModel, "reasoningEfforts">): string[] {
+  const efforts = (model.reasoningEfforts ?? []).flatMap((effort) => {
+    const normalized = normalizeReasoningEffort(effort);
+    return normalized ? [normalized] : [];
+  });
+  return Array.from(new Set(efforts));
+}
+
+export function companyLocalModelSupportsReasoning(model: Pick<CompanyLocalProviderModel, "reasoning" | "reasoningEfforts">): boolean {
+  return model.reasoning === true || companyLocalReasoningEfforts(model).length > 0;
+}
+
+export function companyLocalModelSupportsImageInput(model: Pick<CompanyLocalProviderModel, "id" | "modalities">): boolean {
+  return normalizedModalities(model)?.input.includes("image") ?? isKnownImageInputModel(model.id);
 }
 
 export function setCompanyLocalModelImageInput(
@@ -107,29 +120,50 @@ export function setCompanyLocalModelImageInput(
   };
 }
 
+export function setCompanyLocalModelReasoningEfforts(
+  model: CompanyLocalProviderModel,
+  enabled: boolean,
+): CompanyLocalProviderModel {
+  if (!enabled) {
+    return {
+      ...model,
+      reasoning: model.reasoning === true ? true : undefined,
+      reasoningEfforts: undefined,
+    };
+  }
+  return {
+    ...model,
+    reasoning: true,
+    reasoningEfforts: [...DEFAULT_COMPANY_LOCAL_REASONING_EFFORTS],
+  };
+}
+
 export function resolveCompanyLocalReasoningEffort(
   providerId: string,
-  modelId: string,
+  _modelId: string,
   variant: string | null,
 ): string | undefined {
-  const normalized = variant?.trim().toLowerCase();
-  if (!isCompanyLocalProviderId(providerId) || !isKnownOpenAiReasoningModel(modelId) || !normalized) return undefined;
-  return COMPANY_LOCAL_REASONING_EFFORTS.some((effort) => effort === normalized)
-    ? normalized
-    : undefined;
+  const normalized = variant ? normalizeReasoningEffort(variant) : "";
+  return isCompanyLocalProviderId(providerId) && normalized ? normalized : undefined;
 }
 
 export function buildCompanyLocalProviderConfig(input: Pick<CompanyLocalProviderInstallInput, "baseUrl" | "models">) {
   const models = Object.fromEntries(
     input.models
-      .map((model) => ({
-        id: model.id.trim(),
-        name: model.name.trim() || model.id.trim(),
-        contextWindow: model.contextWindow,
-        outputLimit: model.outputLimit,
-        reasoning: model.reasoning,
-        modalities: normalizedModalities(model),
-      }))
+      .map((model) => {
+        const id = model.id.trim();
+        const modalities = normalizedModalities(model)
+          ?? (isKnownImageInputModel(id) ? { input: ["text", "image"], output: ["text"] } : undefined);
+        return {
+          id,
+          name: model.name.trim() || id,
+          contextWindow: model.contextWindow,
+          outputLimit: model.outputLimit,
+          reasoning: model.reasoning,
+          reasoningEfforts: companyLocalReasoningEfforts(model),
+          modalities,
+        };
+      })
       .filter((model) => model.id)
       .map((model) => {
         const reportedContext = model.contextWindow;
@@ -140,6 +174,7 @@ export function buildCompanyLocalProviderConfig(input: Pick<CompanyLocalProvider
         const output = typeof reportedOutput === "number" && Number.isSafeInteger(reportedOutput) && reportedOutput > 0
           ? reportedOutput
           : undefined;
+        const reasoningEfforts = companyLocalReasoningEfforts(model);
         const supportsReasoning = companyLocalModelSupportsReasoning(model);
         const supportsImageInput = companyLocalModelSupportsImageInput(model);
         return [
@@ -157,9 +192,13 @@ export function buildCompanyLocalProviderConfig(input: Pick<CompanyLocalProvider
             ...(supportsReasoning
               ? {
                   capabilities: { reasoning: true },
-                  variants: Object.fromEntries(
-                    COMPANY_LOCAL_REASONING_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]),
-                  ),
+                  ...(reasoningEfforts.length
+                    ? {
+                        variants: Object.fromEntries(
+                          reasoningEfforts.map((effort) => [effort, { reasoningEffort: effort }]),
+                        ),
+                      }
+                    : {}),
                 }
               : {}),
             ...(model.modalities === undefined

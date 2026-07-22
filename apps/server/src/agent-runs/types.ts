@@ -4,6 +4,8 @@ export type AgentRunMode = AgentRuntimeKind | "multi-agent";
 
 export type AgentRunApprovalMode = "ask" | "auto-review" | "full-access" | "custom";
 
+export type AgentRunApprovalReply = "once" | "always" | "reject";
+
 export type AgentRunStatus = "starting" | "running" | "completed" | "cancelled" | "failed";
 
 export type AgentRunEventType =
@@ -15,10 +17,43 @@ export type AgentRunEventType =
   | "message_delta"
   | "thought_delta"
   | "tool_call"
+  | "approval_requested"
+  | "approval_resolved"
   | "plan"
   | "log"
   | "error"
   | "run_completed";
+
+export type AgentRuntimeApprovalRequest = {
+  agentId: string;
+  title: string;
+  permission: string;
+  patterns: string[];
+  metadata: Record<string, unknown>;
+};
+
+export type AgentRuntimeApprovalHandler = (request: AgentRuntimeApprovalRequest) => Promise<AgentRunApprovalReply>;
+
+export type AgentRunSkill = {
+  name: string;
+  path: string;
+  description: string;
+  scope: "project" | "global";
+  trigger?: string;
+};
+
+export type AgentRunCapabilities = {
+  mcpServers: Record<string, Record<string, unknown>>;
+  skillRoots: string[];
+  skills: AgentRunSkill[];
+  pluginPaths: string[];
+};
+
+export type AgentRunAttachment = {
+  name: string;
+  mime: string;
+  dataUrl: string;
+};
 
 export type AgentRunEvent = {
   seq: number;
@@ -43,6 +78,16 @@ export type AgentRunInput = {
   prompt: string;
   model?: string;
   modelProvider?: string;
+  modelContextWindow?: number;
+  runtimeProvider?: {
+    providerId: string;
+    baseUrl: string;
+    apiKey?: string;
+  };
+  selectedSkills?: string[];
+  attachments?: AgentRunAttachment[];
+  capabilities?: AgentRunCapabilities;
+  requestApproval?: AgentRuntimeApprovalHandler;
   sessionId?: string;
 };
 
@@ -55,7 +100,9 @@ export type AgentRunSnapshot = {
   prompt: string;
   model: string | null;
   modelProvider: string | null;
+  modelContextWindow: number | null;
   sessionId: string | null;
+  attachments: AgentRunAttachment[];
   createdAt: number;
   updatedAt: number;
   events: AgentRunEvent[];

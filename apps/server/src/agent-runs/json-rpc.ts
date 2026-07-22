@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { delimiter, extname, isAbsolute, join } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 
@@ -27,7 +29,7 @@ type JsonRpcServerRequest = {
 };
 
 export type JsonRpcNotificationHandler = (message: JsonRpcNotification) => void;
-export type JsonRpcServerRequestHandler = (message: JsonRpcServerRequest) => JsonObject | null;
+export type JsonRpcServerRequestHandler = (message: JsonRpcServerRequest) => JsonObject | null | Promise<JsonObject | null>;
 export type JsonRpcLogHandler = (line: string) => void;
 
 export type StdioJsonRpcClientOptions = {
@@ -55,6 +57,7 @@ export class StdioJsonRpcClient {
   private readonly onNotification?: JsonRpcNotificationHandler;
   private readonly onRequest?: JsonRpcServerRequestHandler;
   private readonly onStderr?: JsonRpcLogHandler;
+  private readonly stderrTail: string[] = [];
   private nextId = 1;
   private closed = false;
 
@@ -63,21 +66,29 @@ export class StdioJsonRpcClient {
     this.onNotification = options.onNotification;
     this.onRequest = options.onRequest;
     this.onStderr = options.onStderr;
-    this.child = spawn(options.command, options.args, {
+    const command = resolveSpawnCommand(options.command);
+    this.child = spawn(command, options.args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env ?? {}) },
-      shell: process.platform === "win32",
+      shell: shouldUseShell(command),
       windowsHide: true,
     });
     this.stdout = createInterface({ input: this.child.stdout });
     this.stderr = createInterface({ input: this.child.stderr });
     this.stdout.on("line", (line) => this.handleStdoutLine(line));
-    this.stderr.on("line", (line) => this.onStderr?.(line));
+    this.stderr.on("line", (line) => {
+      const cleaned = cleanLogLine(line);
+      if (!cleaned) return;
+      this.stderrTail.push(cleaned);
+      if (this.stderrTail.length > 8) this.stderrTail.shift();
+      this.onStderr?.(cleaned);
+    });
     this.child.on("error", (error) => this.closeWithError(error));
     this.child.on("close", (code, signal) => {
       this.closed = true;
       const suffix = signal ? `signal ${signal}` : `code ${code ?? "unknown"}`;
-      this.closeWithError(new Error(`Agent process exited with ${suffix}`));
+      const detail = this.stderrTail.length ? `\n${this.stderrTail.join("\n")}` : "";
+      this.closeWithError(new Error(`Agent process exited with ${suffix}${detail}`));
     });
   }
 
@@ -128,8 +139,7 @@ export class StdioJsonRpcClient {
     const method = typeof parsed.method === "string" ? parsed.method : null;
     if (id !== null) {
       if (method) {
-        const result = this.onRequest?.({ id, method, params: parsed.params }) ?? {};
-        this.respond(id, result);
+        void this.handleServerRequest({ id, method, params: parsed.params });
         return;
       }
       const pending = this.pending.get(id);
@@ -137,7 +147,7 @@ export class StdioJsonRpcClient {
       this.pending.delete(id);
       const response = parseResponse(parsed, id);
       if (response.error) {
-        pending.reject(new Error(response.error.message || `JSON-RPC request ${id} failed`));
+        pending.reject(new Error(responseErrorMessage(response, id)));
       } else {
         pending.resolve(response.result);
       }
@@ -145,6 +155,15 @@ export class StdioJsonRpcClient {
     }
     if (method) {
       this.onNotification?.({ method, params: parsed.params });
+    }
+  }
+
+  private async handleServerRequest(message: JsonRpcServerRequest): Promise<void> {
+    try {
+      const result = await this.onRequest?.(message);
+      this.respond(message.id, result ?? {});
+    } catch (error) {
+      this.respondError(message.id, error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -156,12 +175,66 @@ export class StdioJsonRpcClient {
     this.child.stdin.write(`${JSON.stringify(payload)}\n`, "utf8");
   }
 
+  private respondError(id: number, message: string): void {
+    if (this.closed) return;
+    const payload = this.includeJsonrpc
+      ? { jsonrpc: "2.0", id, error: { code: -32000, message } }
+      : { id, error: { code: -32000, message } };
+    this.child.stdin.write(`${JSON.stringify(payload)}\n`, "utf8");
+  }
+
   private closeWithError(error: Error): void {
     for (const [, pending] of this.pending) {
       pending.reject(error);
     }
     this.pending.clear();
   }
+}
+
+function shouldUseShell(command: string): boolean {
+  if (process.platform !== "win32") return false;
+  const normalized = command.trim().replace(/^"|"$/g, "");
+  return /\.(?:cmd|bat)$/i.test(normalized);
+}
+
+function resolveSpawnCommand(command: string): string {
+  if (process.platform !== "win32") return command;
+  const normalized = command.trim().replace(/^"|"$/g, "");
+  if (!normalized) return command;
+  if (hasLaunchableWindowsExtension(normalized)) return command;
+
+  if (isAbsolute(normalized) || normalized.includes("/") || normalized.includes("\\")) {
+    const resolved = resolveWindowsExecutablePath(normalized);
+    return resolved ?? command;
+  }
+
+  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
+    if (!directory.trim()) continue;
+    const resolved = resolveWindowsExecutable(directory, normalized);
+    if (resolved) return resolved;
+  }
+  return command;
+}
+
+function resolveWindowsExecutable(directory: string, command: string): string | null {
+  return resolveWindowsExecutablePath(join(directory, command));
+}
+
+function resolveWindowsExecutablePath(base: string): string | null {
+  for (const extension of windowsExecutableExtensions(base)) {
+    const candidate = `${base}${extension}`;
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function windowsExecutableExtensions(command: string): string[] {
+  if (extname(command)) return [""];
+  return [".exe", ".cmd", ".bat", ".com"];
+}
+
+function hasLaunchableWindowsExtension(command: string): boolean {
+  return /\.(?:exe|cmd|bat|com)$/i.test(command);
 }
 
 export function parseJsonObject(input: string): JsonObject | null {
@@ -194,6 +267,25 @@ function parseResponse(value: JsonObject, id: number): JsonRpcResponse {
     result: isJsonValue(value.result) ? value.result : undefined,
     error,
   };
+}
+
+function responseErrorMessage(response: JsonRpcResponse, id: number): string {
+  const error = response.error;
+  if (!error) return `JSON-RPC request ${id} failed`;
+  const message = error.message || `JSON-RPC request ${id} failed`;
+  const data = jsonValueText(error.data);
+  if (!data || data === message) return message;
+  return `${message}: ${data}`;
+}
+
+function jsonValueText(value: JsonValue | undefined): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value.trim();
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
 }
 
 export function isJsonObject(value: JsonValue | undefined): value is JsonObject {
@@ -251,4 +343,11 @@ function isJsonValue(value: unknown): value is JsonValue {
     return true;
   }
   return false;
+}
+
+function cleanLogLine(line: string): string {
+  return line
+    .replace(/\u001B\][^\u0007]*(?:\u0007|\u001B\\)/g, "")
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "")
+    .trimEnd();
 }

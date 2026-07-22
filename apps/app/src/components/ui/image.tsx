@@ -12,6 +12,7 @@ export type ImageProps = GeneratedImageLike &
   Omit<React.ComponentProps<"img">, "src"> & {
     alt: string
     previewMaxHeight?: number
+    containerClassName?: string
   }
 
 const DEFAULT_PREVIEW_MAX_HEIGHT = 100
@@ -32,6 +33,7 @@ export const Image = ({
   uint8Array,
   mediaType = "image/png",
   className,
+  containerClassName,
   alt,
   previewMaxHeight = DEFAULT_PREVIEW_MAX_HEIGHT,
   onLoad,
@@ -128,7 +130,7 @@ export const Image = ({
   }
 
   return (
-    <div className="inline-flex max-w-full flex-col items-start gap-1">
+    <div className={cn("inline-flex max-w-full flex-col items-start gap-1", containerClassName)}>
       <div
         className="relative max-w-full overflow-hidden rounded-md"
         style={expanded ? undefined : { maxHeight: previewMaxHeight }}

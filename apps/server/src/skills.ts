@@ -84,14 +84,15 @@ async function parseSkillEntry(
 async function listSkillsInDir(dir: string, scope: "project" | "global"): Promise<SkillItem[]> {
   if (!(await exists(dir))) return [];
   const entries = await readdir(dir, { withFileTypes: true });
-  const items: SkillItem[] = [];
+  const directItems: SkillItem[] = [];
+  const nestedItems: SkillItem[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const skillPath = join(dir, entry.name, "SKILL.md");
     if (await exists(skillPath)) {
       // Direct skill: <dir>/<name>/SKILL.md
       const item = await parseSkillEntry(skillPath, entry.name, scope);
-      if (item) items.push(item);
+      if (item) directItems.push(item);
     } else {
       // Domain/category folder: <dir>/<domain>/<name>/SKILL.md – scan one level deeper.
       // This supports the convention where global skills are organised as
@@ -109,11 +110,11 @@ async function listSkillsInDir(dir: string, scope: "project" | "global"): Promis
         const subSkillPath = join(domainDir, subEntry.name, "SKILL.md");
         if (!(await exists(subSkillPath))) continue;
         const item = await parseSkillEntry(subSkillPath, subEntry.name, scope);
-        if (item) items.push(item);
+        if (item) nestedItems.push(item);
       }
     }
   }
-  return items;
+  return [...directItems, ...nestedItems];
 }
 
 export async function listSkills(workspaceRoot: string, includeGlobal: boolean): Promise<SkillItem[]> {

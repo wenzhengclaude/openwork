@@ -12,11 +12,13 @@ type Served = { port: number; stop: (closeActiveConnections?: boolean) => void |
 
 const stops: Array<() => void | Promise<void>> = [];
 const roots: string[] = [];
+const runtimeDbs: string[] = [];
 let previousEnv: Record<string, string | undefined> = {};
 
 afterEach(async () => {
   while (stops.length) await stops.pop()?.();
   while (roots.length) await rm(roots.pop()!, { recursive: true, force: true });
+  while (runtimeDbs.length) await rm(runtimeDbs.pop()!, { force: true }).catch(() => undefined);
   for (const [key, value] of Object.entries(previousEnv)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -113,7 +115,9 @@ function startMockOpencode() {
 async function startOpenwork(options?: { branch?: string }) {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "openwork-claude-plugin-"));
   roots.push(workspaceRoot);
-  setEnv("OPENWORK_RUNTIME_DB", join(workspaceRoot, "runtime.sqlite"));
+  const runtimeDb = join(tmpdir(), `openwork-claude-plugin-runtime-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
+  runtimeDbs.push(runtimeDb);
+  setEnv("OPENWORK_RUNTIME_DB", runtimeDb);
 
   const github = startMockGithub(options);
   setEnv("OPENWORK_GITHUB_API_BASE", `http://127.0.0.1:${github.port}`);
@@ -253,12 +257,20 @@ describe("claude plugin bundles", () => {
     const installBody = await installResponse.json() as { item: { pluginId: string; files: Array<{ objectType: string; path: string }> } };
     expect(installBody.item.pluginId).toBe("github:slackapi/slack-mcp-plugin");
 
-    // Skill and command land namespaced under .opencode/.
-    const skillPath = join(openwork.workspaceRoot, ".opencode/skills/slack-plugin/slack-search/SKILL.md");
-    const commandPath = join(openwork.workspaceRoot, ".opencode/commands/slack-plugin/standup.md");
+    // Plugin files keep the Claude plugin layout; Open One also projects native OpenCode entrypoints.
+    const skillPath = join(openwork.workspaceRoot, ".opencode/plugins/slack-plugin/skills/slack-search/SKILL.md");
+    const skillReferencePath = join(openwork.workspaceRoot, ".opencode/plugins/slack-plugin/skills/slack-search/references/tips.md");
+    const materializedSkillPath = join(openwork.workspaceRoot, ".opencode/skills/slack-search/SKILL.md");
+    const commandPath = join(openwork.workspaceRoot, ".opencode/plugins/slack-plugin/commands/standup.md");
+    const pluginReadmePath = join(openwork.workspaceRoot, ".opencode/plugins/slack-plugin/README.md");
     expect(existsSync(skillPath)).toBe(true);
+    expect(existsSync(skillReferencePath)).toBe(true);
+    expect(existsSync(materializedSkillPath)).toBe(true);
     expect(existsSync(commandPath)).toBe(true);
+    expect(existsSync(pluginReadmePath)).toBe(true);
     expect(await readFile(skillPath, "utf8")).toContain("Search Slack messages effectively");
+    expect(await readFile(materializedSkillPath, "utf8")).toContain("Runtime skill dir:");
+    expect(await readFile(skillReferencePath, "utf8")).toContain("Extra reference file.");
 
     // MCP registered in the runtime DB and pushed to the engine.
     const listResponse = await fetch(`${openwork.base}/workspace/ws_1/mcp`, { headers: openwork.headers });
@@ -274,7 +286,10 @@ describe("claude plugin bundles", () => {
     );
     expect(removeResponse.status).toBe(200);
     expect(existsSync(skillPath)).toBe(false);
+    expect(existsSync(skillReferencePath)).toBe(false);
+    expect(existsSync(materializedSkillPath)).toBe(false);
     expect(existsSync(commandPath)).toBe(false);
+    expect(existsSync(pluginReadmePath)).toBe(false);
     const afterRemove = await fetch(`${openwork.base}/workspace/ws_1/mcp`, { headers: openwork.headers });
     const afterRemoveBody = await afterRemove.json() as { items: Array<{ name: string }> };
     expect(afterRemoveBody.items.some((entry) => entry.name === "slack")).toBe(false);

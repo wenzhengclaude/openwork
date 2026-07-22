@@ -70,7 +70,7 @@ export function JoinOrgSuccess({ organizationName, onContinueInBrowser }: JoinOr
       "/v1/auth/desktop-handoff",
       {
         method: "POST",
-        body: JSON.stringify({ desktopScheme: "openwork" }),
+        body: JSON.stringify({ desktopScheme: "openone" }),
       },
       12000,
     );
@@ -210,7 +210,7 @@ export function JoinOrgSuccess({ organizationName, onContinueInBrowser }: JoinOr
             </button>
 
             {handoffAttempted && !actionError ? (
-              <p className="den-copy text-sm">Opening OpenWork now. If nothing happens, download the app or copy the sign-in link.</p>
+              <p className="den-copy text-sm">Opening Open One now. If nothing happens, download the app or copy the sign-in link.</p>
             ) : null}
           </div>
         )}

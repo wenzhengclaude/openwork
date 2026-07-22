@@ -2,26 +2,26 @@
 import type * as React from "react";
 import {
   ArrowLeft,
-  BrainCircuit,
+  ArchiveRestore,
+  Blocks,
+  BookOpenCheck,
   Bug,
-  Cable,
   ChevronDown,
   CloudCog,
   Cog,
-  FolderLock,
+  Database,
+  FolderKey,
+  IdCard,
   Info,
+  KeyRound,
   Layout,
-  Paintbrush,
-  Puzzle,
-  RefreshCcw,
-  ShieldCheck,
+  MonitorCog,
+  Network,
+  PackageCheck,
+  ServerCog,
   SlidersHorizontal,
-  Sparkles,
   Store,
-  Terminal,
-  UserCircle,
-  Wrench,
-  Zap,
+  SwatchBook,
 } from "lucide-react";
 
 import {
@@ -63,37 +63,37 @@ import { useFeatureFlagsPreferences } from "../state/feature-flags-preferences";
 export function getSettingsTabIcon(tab: SettingsTab) {
   switch (tab) {
     case "ai":
-      return Zap;
+      return ServerCog;
     case "preferences":
       return SlidersHorizontal;
     case "shell":
       return Layout;
     case "permissions":
-      return FolderLock;
+      return FolderKey;
     case "cloud-account":
-      return UserCircle;
+      return IdCard;
     case "connect":
-      return Cable;
+      return Network;
     case "cloud-marketplaces":
       return Store;
     case "cloud-providers":
       return CloudCog;
     case "skills":
-      return Sparkles;
+      return BookOpenCheck;
     case "memory":
-      return BrainCircuit;
+      return Database;
     case "extensions":
-      return Puzzle;
+      return Blocks;
     case "environment":
-      return Terminal;
+      return KeyRound;
     case "advanced":
-      return Wrench;
+      return MonitorCog;
     case "appearance":
-      return Paintbrush;
+      return SwatchBook;
     case "updates":
-      return RefreshCcw;
+      return PackageCheck;
     case "recovery":
-      return ShieldCheck;
+      return ArchiveRestore;
     case "debug":
       return Bug;
     default:

@@ -108,6 +108,12 @@ import { VoicePanel } from "../voice/voice-panel";
 import { SidePanel } from "../panel/side-panel";
 import { TerminalDock } from "../terminal/terminal-dock";
 import { useActivePanelTab, usePanelTabStore, useSessionPanelState } from "../panel/panel-tab-store";
+import {
+  diffReviewId,
+  diffReviewLabel,
+  normalizeDiffReviewFiles,
+  type DiffReviewRequest,
+} from "../review/diff-review";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type OpenworkControlAction } from "../../../shell/control/control-provider";
 import { getExtensionId, isOpenWorkExtensionEnabled, OPENWORK_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
@@ -341,32 +347,32 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 
 const TOP_MENU_RUN_MODES: Array<{
   value: ComposerRunMode;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: typeof Terminal;
 }> = [
   {
     value: "opencode",
-    label: "默认模式",
-    description: "使用 Open One 当前标准工作流。",
+    labelKey: "session.run_mode_opencode_label",
+    descriptionKey: "session.run_mode_opencode_desc",
     icon: Terminal,
   },
   {
     value: "multi-agent",
-    label: "多智能体",
-    description: "并行运行 Codex 和 Grok Build。",
+    labelKey: "session.run_mode_multi_agent_label",
+    descriptionKey: "session.run_mode_multi_agent_desc",
     icon: GitBranch,
   },
   {
     value: "codex",
-    label: "Codex",
-    description: "使用 Codex 原生子智能体。",
+    labelKey: "session.run_mode_codex_label",
+    descriptionKey: "session.run_mode_codex_desc",
     icon: Braces,
   },
   {
     value: "grok-build",
-    label: "Grok Build",
-    description: "使用 Grok Build 原生子智能体。",
+    labelKey: "session.run_mode_grok_build_label",
+    descriptionKey: "session.run_mode_grok_build_desc",
     icon: Hammer,
   },
 ];
@@ -439,8 +445,8 @@ function SessionTaskActionsMenu(props: SessionTaskActionsMenuProps) {
             variant="ghost"
             size="icon-sm"
             className="size-7 shrink-0 rounded-xl text-gray-10 transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="任务操作"
-            title="任务操作"
+            aria-label={t("session.task_actions")}
+            title={t("session.task_actions")}
           >
             <MoreHorizontal size={17} />
           </Button>
@@ -449,29 +455,29 @@ function SessionTaskActionsMenu(props: SessionTaskActionsMenuProps) {
       <DropdownMenuContent align={props.align} sideOffset={6} className="w-64">
         <DropdownMenuItem onClick={() => props.onTogglePin(sessionId)}>
           {props.isPinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
-          {props.isPinned ? "取消置顶任务" : "置顶任务"}
+          {props.isPinned ? t("session.unpin_task") : t("session.pin_task")}
         </DropdownMenuItem>
         {props.canRename ? (
           <DropdownMenuItem onClick={() => props.onRename(sessionId)}>
             <Pencil className="size-4" />
-            重命名任务
+            {t("session.rename_task")}
           </DropdownMenuItem>
         ) : null}
         {props.canArchive ? (
           <DropdownMenuItem onClick={() => props.onArchive(sessionId, !props.isArchived)}>
             {props.isArchived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
-            {props.isArchived ? "取消归档任务" : "归档任务"}
+            {props.isArchived ? t("session.unarchive_task") : t("session.archive_task")}
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void props.onOpenSideTask()}>
           <Columns2 className="size-4" />
-          打开侧边任务
+          {t("session.open_side_task")}
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Code2 className="size-4" />
-            在...中继续
+            {t("session.continue_in")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-64">
             {TOP_MENU_RUN_MODES.map((item) => {
@@ -480,8 +486,8 @@ function SessionTaskActionsMenu(props: SessionTaskActionsMenuProps) {
                 <DropdownMenuItem key={item.value} onClick={() => props.onContinueWithRunMode(item.value)}>
                   <Icon className="size-4" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{item.label}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                    <span className="block truncate">{t(item.labelKey)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{t(item.descriptionKey)}</span>
                   </span>
                 </DropdownMenuItem>
               );
@@ -491,37 +497,37 @@ function SessionTaskActionsMenu(props: SessionTaskActionsMenuProps) {
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Copy className="size-4" />
-            复制
+            {t("session.copy_menu")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-56">
             <DropdownMenuItem onClick={props.onCopyLink}>
               <Link className="size-4" />
-              复制任务链接
+              {t("session.copy_task_link")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={props.onCopyTitle}>
               <ClipboardList className="size-4" />
-              复制任务标题
+              {t("session.copy_task_title")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={props.onCopyId}>
               <Hash className="size-4" />
-              复制任务 ID
+              {t("session.copy_task_id")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => void props.onCopyTranscript()}>
               <FileText className="size-4" />
-              复制任务记录
+              {t("session.copy_task_transcript")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuItem onClick={props.onOpenNewWindow}>
           <ExternalLink className="size-4" />
-          在新窗口中打开
+          {t("session.open_task_new_window")}
         </DropdownMenuItem>
         {props.canDelete ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => props.onDelete(sessionId)}>
               <X className="size-4" />
-              删除任务
+              {t("session.delete_task")}
             </DropdownMenuItem>
           </>
         ) : null}
@@ -747,6 +753,23 @@ export function SessionPage(props: SessionPageProps) {
     preserveSidePanelOnPanelOpenRef.current = true;
     setCurrentSidePanel("panel");
   }, [activePanelTab?.id, browserUrlForTarget, downloadOpenTarget, openTab, props.selectedSessionId, props.selectedWorkspaceDisplay.workspaceType, props.selectedWorkspaceRoot, setCurrentSidePanel]);
+
+  const openDiffReview = useCallback((review: DiffReviewRequest, sourceSessionId?: string) => {
+    const sessionId = sourceSessionId ?? props.selectedSessionId;
+    if (!sessionId) return;
+    const files = normalizeDiffReviewFiles(review.files);
+    if (files.length === 0) return;
+    const id = review.id ?? diffReviewId("session", files);
+    openTab(sessionId, {
+      id,
+      type: "review",
+      label: review.label ?? diffReviewLabel(files),
+      files,
+    });
+    preserveSidePanelOnPanelOpenRef.current = true;
+    setCurrentSidePanel("panel");
+  }, [openTab, props.selectedSessionId, setCurrentSidePanel]);
+
   const closeRightPane = useCallback(() => {
     setCurrentSidePanel(null);
   }, [setCurrentSidePanel]);
@@ -766,7 +789,7 @@ export function SessionPage(props: SessionPageProps) {
   const openBrowserUrlControlAction = useMemo<OpenworkControlAction>(() => ({
     id: "browser.open_url",
     label: "Open URL in built-in browser",
-    description: "Create or select an OpenWork built-in browser tab, navigate it to a URL, and return the CDP handle for browser automation.",
+    description: "Create or select an Open One built-in browser tab, navigate it to a URL, and return the CDP handle for browser automation.",
     sideEffect: "navigation",
     requiresArgs: true,
     args: [
@@ -1111,27 +1134,27 @@ export function SessionPage(props: SessionPageProps) {
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(`${label}已复制`);
+      toast.success(t("session.copy_success", { label }));
     } catch (error) {
-      toast.error("复制失败", {
-        description: error instanceof Error ? error.message : "系统剪贴板不可用。",
+      toast.error(t("session.copy_failed"), {
+        description: error instanceof Error ? error.message : t("session.clipboard_unavailable"),
       });
     }
   }, []);
 
   const copyCurrentTaskLink = useCallback(() => {
     if (!props.selectedSessionId || typeof window === "undefined") return;
-    void copyToClipboard(window.location.href, "任务链接");
+    void copyToClipboard(window.location.href, t("session.task_link_label"));
   }, [copyToClipboard, props.selectedSessionId]);
 
   const copyCurrentTaskId = useCallback(() => {
     if (!props.selectedSessionId) return;
-    void copyToClipboard(props.selectedSessionId, "任务 ID");
+    void copyToClipboard(props.selectedSessionId, t("session.task_id_label"));
   }, [copyToClipboard, props.selectedSessionId]);
 
   const copyCurrentTaskTitle = useCallback(() => {
     const title = selectedSessionTitle || t("session.default_title");
-    void copyToClipboard(title, "任务标题");
+    void copyToClipboard(title, t("session.task_title_label"));
   }, [copyToClipboard, selectedSessionTitle]);
 
   const copyCurrentTranscript = useCallback(async () => {
@@ -1144,13 +1167,13 @@ export function SessionPage(props: SessionPageProps) {
       );
       const text = sessionSnapshotTranscriptText(response.item);
       if (!text.trim()) {
-        toast.error("当前任务还没有可复制内容");
+        toast.error(t("session.copy_transcript_empty"));
         return;
       }
-      await copyToClipboard(text, "任务记录");
+      await copyToClipboard(text, t("session.task_transcript_label"));
     } catch (error) {
-      toast.error("复制任务记录失败", {
-        description: error instanceof Error ? error.message : "无法读取当前任务记录。",
+      toast.error(t("session.copy_transcript_failed"), {
+        description: error instanceof Error ? error.message : t("session.copy_transcript_read_unavailable"),
       });
     }
   }, [copyToClipboard, props.openworkServerClient, props.runtimeWorkspaceId, props.selectedSessionId]);
@@ -1163,7 +1186,9 @@ export function SessionPage(props: SessionPageProps) {
       focus: true,
     });
     const item = TOP_MENU_RUN_MODES.find((entry) => entry.value === mode);
-    toast.success(`已切换到${item?.label ?? "运行模式"}`);
+    toast.success(t("session.switched_run_mode", {
+      mode: item ? t(item.labelKey) : t("session.run_mode_fallback"),
+    }));
   }, [props.selectedSessionId]);
 
   const openCurrentTaskInNewWindow = useCallback(() => {
@@ -1181,7 +1206,7 @@ export function SessionPage(props: SessionPageProps) {
       }),
     );
     if (typeof created !== "string" || !created.trim()) {
-      toast.error("无法创建侧边任务");
+      toast.error(t("session.open_side_task_failed"));
       return;
     }
     setSessionTabs((current) => {
@@ -1193,7 +1218,7 @@ export function SessionPage(props: SessionPageProps) {
       return [...withCurrent, { workspaceId: props.selectedWorkspaceId, sessionId: created }];
     });
     setSplitSessionId(created);
-    toast.success("侧边任务已打开");
+    toast.success(t("session.side_task_opened"));
   }, [props.selectedSessionId, props.selectedWorkspaceId, props.sidebar]);
 
   useEffect(() => {
@@ -1576,6 +1601,7 @@ export function SessionPage(props: SessionPageProps) {
                         respondQuestion={props.respondQuestion}
                         safeStringify={props.safeStringify}
                         onOpenTarget={openTarget}
+                        onOpenDiffReview={openDiffReview}
                       />
                     </div>
                     {canRenderSplitSurface ? (
@@ -1590,6 +1616,7 @@ export function SessionPage(props: SessionPageProps) {
                           openworkToken={reactSessionToken}
                           todos={[]}
                           onOpenTarget={openTarget}
+                          onOpenDiffReview={openDiffReview}
                         />
                       </div>
                     ) : null}

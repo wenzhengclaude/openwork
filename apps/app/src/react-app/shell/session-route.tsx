@@ -26,7 +26,6 @@ import {
   buildOpenworkWorkspaceBaseUrl,
   createOpenworkServerClient,
   readOpenworkServerSettings,
-  type OpenworkServerClient,
   type OpenworkWorkspaceInfo,
 } from "@/app/lib/openwork-server";
 import {
@@ -139,7 +138,11 @@ import { ModelPickerModal } from "@/react-app/domains/session/modals/model-picke
 import { CommandPalette, type PaletteItem, type SessionGroupOption, type SessionOption as PaletteSessionOption } from "./command-palette";
 import { SessionSearchDialog } from "./session-search-dialog";
 import type { SessionMessageFetcher } from "@/react-app/domains/session/search/session-search";
-import { getDisplaySessionTitle } from "@/app/lib/session-title";
+import {
+  deriveInitialSessionTitle,
+  getDisplaySessionTitle,
+  shouldApplyInitialSessionTitle,
+} from "@/app/lib/session-title";
 import { useBootState } from "./boot-state";
 import {
   forgetWorkspaceMemory,
@@ -218,7 +221,7 @@ function describeTaskCreateError(error: unknown) {
     lower.includes("internal_error") ||
     lower.includes("unexpected server error")
   ) {
-    return "OpenCode is unavailable for this workspace. Retry once it restarts, or restart OpenWork if the problem continues.";
+    return "OpenCode is unavailable for this workspace. Retry once it restarts, or restart Open One if the problem continues.";
   }
   return message;
 }
@@ -254,41 +257,13 @@ function attachmentMime(attachment: ComposerAttachment) {
   return "text/plain";
 }
 
-function safeInboxSegment(value: string) {
-  const cleaned = value.trim().replace(/[<>:"|?*\u0000-\u001f]/g, "-").replace(/[\\/]+/g, "-");
-  return cleaned.replace(/^\.+$/, "-") || "attachment";
-}
-
-function inboxWorkspacePath(relativePath: string) {
-  return `.opencode/openwork/inbox/${relativePath.replace(/\\/g, "/")}`;
-}
-
-async function stageDraftAttachments(input: {
-  client: OpenworkServerClient;
-  workspaceId: string;
-  sessionId: string;
-  attachments: ComposerAttachment[];
-}) {
-  if (!input.attachments.length) return [];
-  const sessionSegment = safeInboxSegment(input.sessionId);
-  const uploads = await Promise.allSettled(input.attachments.map(async (attachment, index) => {
-    const filename = safeInboxSegment(attachment.name);
-    const relativePath = `attachments/${sessionSegment}/${Date.now()}-${index + 1}-${filename}`;
-    const uploaded = await input.client.uploadInbox(input.workspaceId, attachment.file, { path: relativePath });
-    return {
-      name: attachment.name,
-      path: inboxWorkspacePath(uploaded.path),
-    };
-  }));
-  return uploads.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+function selectedSkillInstruction(name: string) {
+  return `Load [skill ${name}] and follow its instructions.`;
 }
 
 async function draftToParts(input: {
   draft: ComposerDraft;
   workspaceRoot: string;
-  client: OpenworkServerClient;
-  workspaceId: string;
-  sessionId: string;
 }) {
   const { draft, workspaceRoot } = input;
   const parts: Array<TextPartInput | FilePartInput | AgentPartInput> = [];
@@ -323,7 +298,7 @@ async function draftToParts(input: {
       continue;
     }
     if (part.type === "skill") {
-      parts.push({ type: "text", text: `Load [skill ${part.name}] and follow its instructions.` });
+      parts.push({ type: "text", text: selectedSkillInstruction(part.name) });
       continue;
     }
     if (part.type === "app") {
@@ -340,24 +315,6 @@ async function draftToParts(input: {
         filename: filenameFromPath(part.path),
       });
     }
-  }
-
-  const stagedAttachments = await stageDraftAttachments({
-    client: input.client,
-    workspaceId: input.workspaceId,
-    sessionId: input.sessionId,
-    attachments: draft.attachments,
-  });
-  if (stagedAttachments.length) {
-    parts.push({
-      type: "text",
-      text: [
-        "",
-        "Attached files were also saved into the workspace inbox for tool or shell access:",
-        ...stagedAttachments.map((attachment) => `- ${attachment.name}: ${attachment.path}`),
-        "Use these paths instead of looking for the bare filename in the current directory.",
-      ].join("\n"),
-    });
   }
 
   parts.push(...firstLineLocalFileParts(draft.resolvedText ?? draft.text, root));
@@ -977,19 +934,46 @@ export function SessionRoute() {
           return;
         }
 
+        const initialSessionTitle = deriveInitialSessionTitle(text);
+        const currentSession = sessionsByWorkspaceIdRef.current[selectedWorkspaceId]?.find((session) => session.id === targetSessionId);
+        if (initialSessionTitle && shouldApplyInitialSessionTitle(currentSession?.title)) {
+          try {
+            await opencodeClient.session.update({
+              sessionID: targetSessionId,
+              title: initialSessionTitle,
+              directory: selectedWorkspaceRoot || undefined,
+            });
+            setSessionsByWorkspaceId((current) => {
+              const list = current[selectedWorkspaceId] ?? [];
+              let changed = false;
+              const nextList = list.map((session) => {
+                if (session.id !== targetSessionId) return session;
+                changed = true;
+                return { ...session, title: initialSessionTitle };
+              });
+              if (!changed) return current;
+              const next = { ...current, [selectedWorkspaceId]: nextList };
+              sessionsByWorkspaceIdRef.current = next;
+              return next;
+            });
+          } catch {
+            // Title updates are non-critical; the prompt should still be sent.
+          }
+        }
+
         const parts = await draftToParts({
           draft,
           workspaceRoot: selectedWorkspaceRoot,
-          client,
-          workspaceId: selectedWorkspaceId,
-          sessionId: targetSessionId,
         });
         const envSystemContext = await buildOpenworkEnvSystemContext(client, {
           cacheKey: targetSessionId,
           runtimeKey: environmentRuntimeKey,
         });
         const selectedModel = local.prefs.defaultModel;
-        const companyReasoningEffort = selectedModel
+        const selectedModelHasBehaviorVariant = modelVariantValue
+          ? modelBehaviorOptions.some((option) => option.value === modelVariantValue)
+          : false;
+        const companyReasoningEffort = selectedModel && selectedModelHasBehaviorVariant
           ? resolveCompanyLocalReasoningEffort(selectedModel.providerID, selectedModel.modelID, modelVariantValue)
           : undefined;
         const result = await opencodeClient.session.promptAsync({
@@ -1197,7 +1181,7 @@ export function SessionRoute() {
     setRenameWorkspaceBusy(true);
     try {
       if (!client) {
-        toast.error("OpenWork server is unavailable. Reconnect the server before renaming workspaces.");
+        toast.error("Open One server is unavailable. Reconnect the server before renaming workspaces.");
         return;
       }
       await client.updateWorkspaceDisplayName(renameWorkspaceId, trimmed);
@@ -1246,7 +1230,7 @@ export function SessionRoute() {
         downloadWorkspaceJson(workspaceExportFilename(workspace), payload);
         return;
       }
-      throw new Error("OpenWork server is unavailable. Reconnect the server before exporting workspace config.");
+      throw new Error("Open One server is unavailable. Reconnect the server before exporting workspace config.");
     },
     [endpointForWorkspace, workspaces],
   );
@@ -1851,7 +1835,7 @@ export function SessionRoute() {
           .catch(() => null);
       }
       if (!list) {
-        throw new Error("OpenWork server is unavailable. Start or reconnect the server before creating a workspace.");
+        throw new Error("Open One server is unavailable. Start or reconnect the server before creating a workspace.");
       }
       const createdId = resolveWorkspaceListSelectedId(list) || list.workspaces[list.workspaces.length - 1]?.id || "";
       let targetWorkspaceId = createdId;
@@ -1979,7 +1963,7 @@ export function SessionRoute() {
         list = await client.createRemoteWorkspace(payload).catch(() => null);
       }
       if (!list) {
-        throw new Error("OpenWork server is unavailable. Start or reconnect the server before connecting a remote workspace.");
+        throw new Error("Open One server is unavailable. Start or reconnect the server before connecting a remote workspace.");
       }
       const createdId = resolveWorkspaceListSelectedId(list) || list.workspaces[list.workspaces.length - 1]?.id || "";
       if (createdId) {

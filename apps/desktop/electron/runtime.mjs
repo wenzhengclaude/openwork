@@ -80,7 +80,22 @@ export function commandMatchesPackagedSidecar(command, sidecarDirs = []) {
   }
   return value.includes("openwork-orchestrator") ||
     value.includes("openwork-server") ||
-    /(?:^|[/\\])opencode[^/\\\s]*\s+serve\b/.test(value);
+    /(?:^|[/\\])opencode[^/\\\s]*\s+serve\b/.test(value) ||
+    /(?:^|[/\\])codex[^/\\\s]*\s+app-server\b/.test(value) ||
+    /(?:^|[/\\])grok[^/\\\s]*\s+agent\b/.test(value);
+}
+
+export function resolveBundledAgentCommandEnv(sidecarDirs = [], env = process.env) {
+  const values = {};
+  for (const agent of [
+    { baseName: "codex", envKey: "OPENONE_CODEX_COMMAND" },
+    { baseName: "grok", envKey: "OPENONE_GROK_COMMAND" },
+  ]) {
+    if (String(env[agent.envKey] ?? "").trim()) continue;
+    const binaryPath = resolveBundledBinaryPath(agent.baseName, sidecarDirs);
+    if (binaryPath) values[agent.envKey] = binaryPath;
+  }
+  return values;
 }
 
 export function embeddedServerImportUrl(embeddedPath) {
@@ -205,13 +220,13 @@ function redactedExecutionSnapshot(command, args, cwd, injectedEnv) {
 
 function assertOpenworkServerReady(snapshot) {
   if (!snapshot?.running) {
-    throw new Error("OpenWork server did not stay running after startup.");
+    throw new Error("Open One server did not stay running after startup.");
   }
   if (!snapshot.baseUrl) {
-    throw new Error("OpenWork server did not report a base URL after startup.");
+    throw new Error("Open One server did not report a base URL after startup.");
   }
   if (!snapshot.ownerToken && !snapshot.clientToken) {
-    throw new Error("OpenWork server did not report an access token after startup.");
+    throw new Error("Open One server did not report an access token after startup.");
   }
   return snapshot;
 }
@@ -290,6 +305,16 @@ function binaryFileNames(baseName) {
     triple ? `${baseName}-${triple}${ext}` : null,
     `${baseName}${ext}`,
   ].filter(Boolean);
+}
+
+function resolveBundledBinaryPath(baseName, sidecarDirs) {
+  for (const directory of sidecarDirs) {
+    for (const fileName of binaryFileNames(baseName)) {
+      const candidate = path.join(directory, fileName);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
 }
 
 function isDirectory(targetPath) {
@@ -522,7 +547,7 @@ export async function resolveSystemCaEnv({
   const env = parentEnv ?? {};
   if (Object.prototype.hasOwnProperty.call(env, "NODE_EXTRA_CA_CERTS")) {
     if (typeof logInfo === "function") {
-      logInfo("OpenWork runtime: NODE_EXTRA_CA_CERTS is already set; skipping system CA bundle export.");
+      logInfo("Open One runtime: NODE_EXTRA_CA_CERTS is already set; skipping system CA bundle export.");
     }
     return {};
   }
@@ -780,6 +805,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     // Bun honors Node's NODE_EXTRA_CA_CERTS, so bundled Bun sidecars inherit
     // the exported OS trust store through the same child env variable.
     const env = mergeSystemCaChildEnv(baseEnv, caEnv, extra);
+    Object.assign(env, resolveBundledAgentCommandEnv(sidecarDirs, env));
     const pathKey =
       Object.prototype.hasOwnProperty.call(env, "PATH") ||
       !Object.prototype.hasOwnProperty.call(env, "Path")
@@ -1137,7 +1163,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
           "Content-Type": "application/json",
           "X-OpenWork-Host-Token": hostToken,
         },
-        body: JSON.stringify({ scope: "owner", label: "OpenWork desktop owner token" }),
+        body: JSON.stringify({ scope: "owner", label: "Open One desktop owner token" }),
       },
       5000,
     );
@@ -1198,7 +1224,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       : [...packagedPaths, devPath];
     const embeddedPath = candidates.find((candidate) => existsSync(candidate));
     if (!embeddedPath) {
-      throw new Error(`Cannot find OpenWork embedded server bundle. Checked: ${candidates.join(", ")}`);
+      throw new Error(`Cannot find Open One embedded server bundle. Checked: ${candidates.join(", ")}`);
     }
     const { startEmbeddedServer } = await import(embeddedServerImportUrl(embeddedPath));
     // startEmbeddedServer falls back to an OS-assigned port if `port` races
@@ -1275,7 +1301,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
           engineState.childExited = false;
         }
       } catch (error) {
-        appendOutput(openworkServerState, "lastStderr", `OpenWork server workspace probe: ${error instanceof Error ? error.message : String(error)}\n`);
+        appendOutput(openworkServerState, "lastStderr", `Open One server workspace probe: ${error instanceof Error ? error.message : String(error)}\n`);
       }
     }
     if (!portSelection.preferredPort || boundPort === portSelection.preferredPort) {
@@ -1453,7 +1479,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
         opencodeBinPath: options.opencodeBinPath,
       });
     } catch (error) {
-      appendOutput(engineState, "lastStderr", `OpenWork server: ${error instanceof Error ? error.message : String(error)}\n`);
+      appendOutput(engineState, "lastStderr", `Open One server: ${error instanceof Error ? error.message : String(error)}\n`);
       throw error;
     }
 
@@ -1633,7 +1659,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
         status: -1,
         stdout: "",
         stderr:
-          "Guided install is not supported on Windows yet. Install the OpenWork-pinned OpenCode version manually, then restart OpenWork.",
+          "Guided install is not supported on Windows yet. Install the Open One-pinned OpenCode version manually, then restart Open One.",
       };
     }
 

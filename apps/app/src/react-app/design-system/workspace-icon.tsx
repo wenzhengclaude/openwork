@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 
-import { OpenOneMark } from "./open-one-mark";
+import { Folder } from "lucide-react";
 
 export type WorkspaceIconProps = {
   workspaceId: string;
@@ -9,5 +9,5 @@ export type WorkspaceIconProps = {
 };
 
 export function WorkspaceIcon({ workspaceId: _workspaceId, sizeClass = "size-4" }: WorkspaceIconProps) {
-  return <OpenOneMark className={sizeClass} />;
+  return <Folder className={`${sizeClass} shrink-0 text-muted-foreground`} />;
 }

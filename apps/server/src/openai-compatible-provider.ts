@@ -6,6 +6,7 @@ export type OpenAiCompatibleModel = {
   contextWindow?: number;
   outputLimit?: number;
   reasoning?: boolean;
+  reasoningEfforts?: string[];
   modalities?: {
     input: string[];
     output: string[];
@@ -51,6 +52,56 @@ function readBoolean(value: Record<string, unknown>, key: string): boolean | und
   return typeof candidate === "boolean" ? candidate : undefined;
 }
 
+const DEFAULT_REASONING_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
+
+function normalizeReasoningEffort(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replace(/[_\s]+/g, "-");
+  return normalized ? normalized : undefined;
+}
+
+function normalizeReasoningEfforts(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.flatMap((entry) => {
+    const effort = normalizeReasoningEffort(entry);
+    return effort ? [effort] : [];
+  })));
+}
+
+function readReasoningEfforts(value: Record<string, unknown>, keys: string[]): string[] {
+  return Array.from(new Set(keys.flatMap((key) => normalizeReasoningEfforts(value[key]))));
+}
+
+function inferReasoningEffortsFromModelMetadata(item: Record<string, unknown>, modelId: string): string[] {
+  const ownedBy = readString(item, "owned_by").toLowerCase();
+  if (ownedBy !== "openai") return [];
+  if (/^(?:gpt[-_.]?5(?:[-_.][a-z0-9]+)*|codex(?:[-_.][a-z0-9]+)*)$/i.test(modelId.trim())) {
+    return [...DEFAULT_REASONING_EFFORTS];
+  }
+  return [];
+}
+
+function resolveReasoningEfforts(item: Record<string, unknown>, capabilities: Record<string, unknown>, modelId: string): string[] {
+  const reasoning = isRecord(item.reasoning) ? item.reasoning : undefined;
+  const capabilityReasoning = isRecord(capabilities.reasoning) ? capabilities.reasoning : undefined;
+  const efforts = Array.from(new Set([
+    ...readReasoningEfforts(item, ["reasoning_efforts", "reasoningEfforts", "supported_reasoning_efforts", "supportedReasoningEfforts"]),
+    ...readReasoningEfforts(capabilities, ["reasoning_efforts", "reasoningEfforts", "supported_reasoning_efforts", "supportedReasoningEfforts"]),
+    ...normalizeReasoningEfforts(reasoning?.efforts),
+    ...normalizeReasoningEfforts(capabilityReasoning?.efforts),
+  ]));
+  if (efforts.length) return efforts;
+
+  const supportsEffort = readBoolean(item, "supports_reasoning_effort")
+    ?? readBoolean(item, "supportsReasoningEffort")
+    ?? readBoolean(capabilities, "supports_reasoning_effort")
+    ?? readBoolean(capabilities, "supportsReasoningEffort")
+    ?? readBoolean(reasoning ?? {}, "effort")
+    ?? readBoolean(capabilityReasoning ?? {}, "effort");
+  if (supportsEffort === true) return [...DEFAULT_REASONING_EFFORTS];
+  return inferReasoningEffortsFromModelMetadata(item, modelId);
+}
+
 const SUPPORTED_MODALITIES = new Set(["text", "image", "audio", "video", "pdf"]);
 
 function normalizeModality(value: unknown): string | undefined {
@@ -91,7 +142,7 @@ function hasImageCapability(value: Record<string, unknown>): boolean {
 }
 
 function inferImageInputFromModelId(modelId: string): boolean {
-  return /(?:^|[-_./])(?:qwen(?:[-_.]?\d+(?:[-_.]\d+)?)?[-_.]?vl|llava|internvl|minicpm[-_.]?v|glm[-_.]?4v|gpt[-_.]?4o|vision|multimodal)(?:[-_./]|$)/i.test(modelId);
+  return /(?:^|[-_./])(?:qwen(?:[-_.]?\d+(?:[-_.]\d+)?)?[-_.]?vl|llava|internvl|minicpm[-_.]?v|glm[-_.]?4v|gpt[-_.]?4o|gpt[-_.]?5(?:[-_.]\d+)?|vision|multimodal)(?:[-_./]|$)/i.test(modelId);
 }
 
 function resolveModalities(item: Record<string, unknown>, capabilities: Record<string, unknown>, modelId: string) {
@@ -195,6 +246,7 @@ export function parseOpenAiCompatibleModels(payload: unknown): OpenAiCompatibleM
       "max_tokens",
       "output_token_limit",
     ]);
+    const reasoningEfforts = resolveReasoningEfforts(item, capabilities, id);
     const reasoning = readBoolean(item, "supports_reasoning") ?? readBoolean(item, "reasoning") ?? readBoolean(capabilities, "reasoning");
     const modalities = resolveModalities(item, capabilities, id);
     models.set(id, {
@@ -202,7 +254,8 @@ export function parseOpenAiCompatibleModels(payload: unknown): OpenAiCompatibleM
       name,
       ...(contextWindow === undefined ? {} : { contextWindow }),
       ...(outputLimit === undefined ? {} : { outputLimit }),
-      ...(reasoning === true ? { reasoning: true } : {}),
+      ...(reasoning === true || reasoningEfforts.length > 0 ? { reasoning: true } : {}),
+      ...(reasoningEfforts.length > 0 ? { reasoningEfforts } : {}),
       ...(modalities === undefined ? {} : { modalities }),
     });
     if (models.size >= MAX_MODELS) break;

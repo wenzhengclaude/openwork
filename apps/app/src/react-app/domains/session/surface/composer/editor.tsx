@@ -418,7 +418,173 @@ function $createComposerPastedTextNode(label: string, lines: number) {
   return $applyNodeReplacement(new ComposerPastedTextNode(label, lines));
 }
 
-type ComposerInlineTokenNode = ComposerMentionNode | ComposerSlashCommandNode | ComposerSkillNode | ComposerPastedTextNode;
+type SerializedComposerGitHubRepoUrlNode = Spread<
+  {
+    repoUrl: string;
+    type: "composer-github-repo-url";
+    version: 1;
+  },
+  SerializedTextNode
+>;
+
+const GITHUB_REPO_URL_PATTERN = /https?:\/\/(?:www\.)?github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9_-](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?(?:\.git)?\/?(?=$|[\s"'`<>()\[\]{}。，、！？!?；;:,])/gi;
+
+type GitHubRepoUrlPart =
+  | { kind: "text"; value: string }
+  | { kind: "github-repo-url"; url: string; label: string };
+
+function getGitHubRepoUrlLabel(url: string) {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname !== "github.com" && hostname !== "www.github.com") return null;
+    const segments = parsed.pathname.replace(/^\/+|\/+$/g, "").split("/");
+    const owner = segments[0];
+    const repo = segments[1];
+    if (!owner || !repo) return null;
+    return `${owner}/${repo}`;
+  } catch {
+    return null;
+  }
+}
+
+function splitGitHubRepoUrlParts(text: string): GitHubRepoUrlPart[] {
+  GITHUB_REPO_URL_PATTERN.lastIndex = 0;
+  const parts: GitHubRepoUrlPart[] = [];
+  let cursor = 0;
+  let match = GITHUB_REPO_URL_PATTERN.exec(text);
+
+  while (match?.[0]) {
+    const url = match[0];
+    const label = getGitHubRepoUrlLabel(url);
+    if (!label) {
+      match = GITHUB_REPO_URL_PATTERN.exec(text);
+      continue;
+    }
+
+    if (match.index > cursor) {
+      parts.push({ kind: "text", value: text.slice(cursor, match.index) });
+    }
+    parts.push({ kind: "github-repo-url", url, label });
+    cursor = match.index + url.length;
+    match = GITHUB_REPO_URL_PATTERN.exec(text);
+  }
+
+  if (cursor < text.length) {
+    parts.push({ kind: "text", value: text.slice(cursor) });
+  }
+
+  return parts.length > 0 ? parts : [{ kind: "text", value: text }];
+}
+
+function createGitHubRepoUrlDom(url: string) {
+  const label = getGitHubRepoUrlLabel(url) ?? url;
+  const dom = document.createElement("span");
+  dom.className = "inline-flex items-center gap-1 rounded px-1 text-[15px] font-medium text-blue-11 underline decoration-blue-8/45 underline-offset-2";
+  dom.contentEditable = "false";
+  dom.setAttribute("spellcheck", "false");
+  dom.title = url;
+  dom.dataset.githubRepoUrl = url;
+
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("fill", "none");
+  icon.setAttribute("stroke", "currentColor");
+  icon.setAttribute("stroke-width", "2");
+  icon.setAttribute("stroke-linecap", "round");
+  icon.setAttribute("stroke-linejoin", "round");
+  icon.setAttribute("class", "h-4 w-4 shrink-0");
+  icon.setAttribute("aria-hidden", "true");
+  const firstPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  firstPath.setAttribute("d", "M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4");
+  const secondPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  secondPath.setAttribute("d", "M9 18c-4.51 2-5-2-7-2");
+  icon.append(firstPath, secondPath);
+
+  const text = document.createElement("span");
+  text.textContent = label;
+
+  dom.append(icon, text);
+  return dom;
+}
+
+function updateGitHubRepoUrlDom(dom: HTMLElement, url: string) {
+  const text = dom.lastElementChild;
+  if (text) text.textContent = getGitHubRepoUrlLabel(url) ?? url;
+  dom.title = url;
+  dom.dataset.githubRepoUrl = url;
+}
+
+class ComposerGitHubRepoUrlNode extends TextNode {
+  __url: string;
+
+  static override getType() {
+    return "composer-github-repo-url";
+  }
+
+  static override clone(node: ComposerGitHubRepoUrlNode) {
+    return new ComposerGitHubRepoUrlNode(node.__url, node.__key);
+  }
+
+  static override importJSON(serializedNode: SerializedComposerGitHubRepoUrlNode) {
+    return $createComposerGitHubRepoUrlNode(serializedNode.repoUrl);
+  }
+
+  constructor(url = "", key?: NodeKey) {
+    super(url, key);
+    this.__url = url;
+  }
+
+  override exportJSON(): SerializedComposerGitHubRepoUrlNode {
+    return {
+      ...super.exportJSON(),
+      repoUrl: this.__url,
+      type: "composer-github-repo-url",
+      version: 1,
+    };
+  }
+
+  override createDOM(_config: EditorConfig) {
+    return createGitHubRepoUrlDom(this.__url);
+  }
+
+  override updateDOM(prevNode: ComposerGitHubRepoUrlNode, dom: HTMLElement) {
+    if (prevNode.__url !== this.__url) {
+      updateGitHubRepoUrlDom(dom, this.__url);
+    }
+    return false;
+  }
+
+  override canInsertTextBefore(): false {
+    return false;
+  }
+
+  override canInsertTextAfter(): false {
+    return false;
+  }
+
+  override isTextEntity(): true {
+    return true;
+  }
+
+  override isToken(): true {
+    return true;
+  }
+}
+
+function $createComposerGitHubRepoUrlNode(url: string) {
+  return $applyNodeReplacement(new ComposerGitHubRepoUrlNode(url));
+}
+
+type ComposerInlineTokenNode = ComposerMentionNode | ComposerSlashCommandNode | ComposerSkillNode | ComposerPastedTextNode | ComposerGitHubRepoUrlNode;
+
+function isComposerInlineTokenNode(node: unknown): node is ComposerInlineTokenNode {
+  return node instanceof ComposerMentionNode
+    || node instanceof ComposerSlashCommandNode
+    || node instanceof ComposerSkillNode
+    || node instanceof ComposerPastedTextNode
+    || node instanceof ComposerGitHubRepoUrlNode;
+}
 
 function setSelectionAfterNode(node: TextNode) {
   const parent = node.getParent();
@@ -467,6 +633,21 @@ function appendSegmentWithNewlines(
   return current;
 }
 
+function appendSegmentWithInlineDisplays(
+  paragraph: ReturnType<typeof $createParagraphNode>,
+  segment: string,
+) {
+  let current = paragraph;
+  for (const part of splitGitHubRepoUrlParts(segment)) {
+    if (part.kind === "github-repo-url") {
+      current.append($createComposerGitHubRepoUrlNode(part.url));
+      continue;
+    }
+    current = appendSegmentWithNewlines(current, part.value);
+  }
+  return current;
+}
+
 function setPrompt(value: string, mentions: Record<string, ComposerMentionKind>, pastedText?: Array<{ label: string; lines: number }>) {
   const root = $getRoot();
   root.clear();
@@ -505,7 +686,7 @@ function setPrompt(value: string, mentions: Record<string, ComposerMentionKind>,
         continue;
       }
     }
-    paragraph = appendSegmentWithNewlines(paragraph, segment);
+    paragraph = appendSegmentWithInlineDisplays(paragraph, segment);
   }
 }
 
@@ -670,6 +851,48 @@ function PasteChipPlugin(props: { onPasteText?: (text: string) => void }) {
   return null;
 }
 
+function createInlineNodesForGitHubRepoUrlPaste(text: string) {
+  const parts = splitGitHubRepoUrlParts(text);
+  if (!parts.some((part) => part.kind === "github-repo-url")) return null;
+  const nodes: TextNode[] = [];
+  for (const part of parts) {
+    if (part.kind === "github-repo-url") {
+      nodes.push($createComposerGitHubRepoUrlNode(part.url));
+    } else if (part.value) {
+      nodes.push($createTextNode(part.value));
+    }
+  }
+  return nodes;
+}
+
+function GitHubRepoUrlPastePlugin() {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    return editor.registerCommand(
+      PASTE_COMMAND,
+      (event: ClipboardEvent) => {
+        const files = event.clipboardData?.files;
+        if (files && files.length > 0) return false;
+        const text = event.clipboardData?.getData("text/plain") ?? "";
+        if (!text.trim() || /[\r\n]/.test(text)) return false;
+
+        const nodes = createInlineNodesForGitHubRepoUrlPaste(text);
+        if (!nodes) return false;
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return false;
+
+        event.preventDefault();
+        selection.insertNodes(nodes);
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+  }, [editor]);
+
+  return null;
+}
+
 function MentionChipNavigationPlugin() {
   const [editor] = useLexicalComposerContext();
 
@@ -710,10 +933,10 @@ function MentionChipNavigationPlugin() {
           }
         }
 
-        // --- Mention / pasted-text chips: atomic delete (same as before) ---
+        // --- Inline chips: atomic delete (same as before) ---
         if ($isTextNode(anchorNode) && selection.anchor.offset === 0) {
           const previous = anchorNode.getPreviousSibling();
-          if (previous instanceof ComposerMentionNode || previous instanceof ComposerSkillNode || previous instanceof ComposerPastedTextNode) {
+          if (isComposerInlineTokenNode(previous)) {
             previous.remove();
             return true;
           }
@@ -721,7 +944,7 @@ function MentionChipNavigationPlugin() {
 
         if ($isElementNode(anchorNode)) {
           const previous = anchorNode.getChildAtIndex(selection.anchor.offset - 1);
-          if (previous instanceof ComposerSlashCommandNode || previous instanceof ComposerMentionNode || previous instanceof ComposerSkillNode || previous instanceof ComposerPastedTextNode) {
+          if (isComposerInlineTokenNode(previous)) {
             previous.remove();
             return true;
           }
@@ -741,7 +964,7 @@ function MentionChipNavigationPlugin() {
 
         if ($isTextNode(anchorNode) && selection.anchor.offset === 0) {
           const previous = anchorNode.getPreviousSibling();
-          if (previous instanceof ComposerMentionNode || previous instanceof ComposerSlashCommandNode || previous instanceof ComposerSkillNode || previous instanceof ComposerPastedTextNode) {
+          if (isComposerInlineTokenNode(previous)) {
             setSelectionBeforeNode(previous);
             return true;
           }
@@ -759,14 +982,14 @@ function MentionChipNavigationPlugin() {
         if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
         const anchorNode = selection.anchor.getNode();
 
-        if (anchorNode instanceof ComposerMentionNode || anchorNode instanceof ComposerSlashCommandNode || anchorNode instanceof ComposerSkillNode || anchorNode instanceof ComposerPastedTextNode) {
+        if (isComposerInlineTokenNode(anchorNode)) {
           setSelectionAfterNode(anchorNode);
           return true;
         }
 
         if ($isElementNode(anchorNode)) {
           const current = anchorNode.getChildAtIndex(selection.anchor.offset);
-          if (current instanceof ComposerMentionNode || current instanceof ComposerSlashCommandNode || current instanceof ComposerSkillNode || current instanceof ComposerPastedTextNode) {
+          if (isComposerInlineTokenNode(current)) {
             setSelectionAfterNode(current);
             return true;
           }
@@ -819,7 +1042,7 @@ export const LexicalPromptEditor = forwardRef<LexicalPromptEditorHandle, EditorP
         throw error;
       },
         editable: !props.disabled,
-        nodes: [ComposerMentionNode, ComposerSlashCommandNode, ComposerSkillNode, ComposerPastedTextNode],
+        nodes: [ComposerMentionNode, ComposerSlashCommandNode, ComposerSkillNode, ComposerPastedTextNode, ComposerGitHubRepoUrlNode],
         editorState: () => {
           setPrompt(props.value, props.mentions, props.pastedText);
         },
@@ -892,6 +1115,7 @@ export const LexicalPromptEditor = forwardRef<LexicalPromptEditorHandle, EditorP
         <SyncPlugin value={props.value} mentions={props.mentions} pastedText={props.pastedText} disabled={props.disabled} />
         <SubmitPlugin onSubmit={props.onSubmit} disabled={props.disabled} />
         <PasteChipPlugin onPasteText={props.onPasteText} />
+        <GitHubRepoUrlPastePlugin />
         <MentionChipNavigationPlugin />
         <ImperativeHandlePlugin editorRef={ref} />
       </div>

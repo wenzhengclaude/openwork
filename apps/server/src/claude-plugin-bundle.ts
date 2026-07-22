@@ -28,7 +28,7 @@ export type ClaudePluginSource = {
 };
 
 export type ClaudePluginComponent = {
-  type: "mcp" | "skill" | "command" | "agent";
+  type: "mcp" | "skill" | "command" | "agent" | "file";
   name: string;
   description: string | null;
 };
@@ -242,6 +242,43 @@ function normalizeRelative(root: string, path: string): string {
   return `${root}${cleaned}`;
 }
 
+const INSTALLABLE_SUPPORT_EXTENSIONS = new Set([
+  ".abap",
+  ".bat",
+  ".cmd",
+  ".csv",
+  ".ini",
+  ".js",
+  ".json",
+  ".jsonc",
+  ".md",
+  ".mjs",
+  ".ps1",
+  ".psd1",
+  ".psm1",
+  ".py",
+  ".sh",
+  ".sql",
+  ".toml",
+  ".ts",
+  ".tsv",
+  ".txt",
+  ".vb",
+  ".vbs",
+  ".xml",
+  ".yaml",
+  ".yml",
+]);
+
+function isInstallableSupportPath(relativePath: string): boolean {
+  const path = relativePath.trim();
+  if (!path || path.split("/").some((part) => part === "." || part === "..")) return false;
+  const fileName = path.split("/").at(-1)?.toLowerCase() ?? "";
+  const extensionStart = fileName.lastIndexOf(".");
+  if (extensionStart < 0) return false;
+  return INSTALLABLE_SUPPORT_EXTENSIONS.has(fileName.slice(extensionStart));
+}
+
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let index = 0;
@@ -289,7 +326,7 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
   const description = readString(manifest.description);
   const version = readString(manifest.version);
   if (manifest.hooks !== undefined) {
-    warnings.push("This plugin declares hooks, which OpenWork does not support yet. Hooks were skipped.");
+    warnings.push("This plugin declares hooks, which Open One does not support yet. Hooks were skipped.");
   }
 
   // --- Collect component file paths -----------------------------------------
@@ -315,6 +352,7 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
 
   const commandPaths = collectMarkdown(readPathList(manifest.commands), "commands");
   const agentPaths = collectMarkdown(readPathList(manifest.agents), "agents");
+  const dotMcpPath = `${root}.mcp.json`;
 
   // Skills are directories containing SKILL.md.
   const skillRoots = readPathList(manifest.skills).map((entry) => normalizeRelative(root, entry)).filter(Boolean);
@@ -322,17 +360,20 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
   const skillEntrypoints = [...treeByPath.keys()]
     .filter((path) => skillPrefixes.some((prefix) => path.startsWith(prefix)) && path.endsWith("/SKILL.md"))
     .sort();
-  const skillExtraFiles = new Map<string, number>();
+  const skillExtraFilePaths = new Map<string, string[]>();
   for (const entrypoint of skillEntrypoints) {
     const skillDir = entrypoint.slice(0, -"SKILL.md".length);
     const extras = [...treeByPath.keys()].filter((path) => path.startsWith(skillDir) && path !== entrypoint);
-    if (extras.length > 0) skillExtraFiles.set(entrypoint, extras.length);
+    if (extras.length > 0) skillExtraFilePaths.set(entrypoint, extras.sort());
   }
-  if (skillExtraFiles.size > 0) {
-    warnings.push(
-      `Some skills bundle extra files beyond SKILL.md (${[...skillExtraFiles.keys()].map((path) => path.split("/").at(-2)).join(", ")}). Only SKILL.md is installed for now.`,
-    );
-  }
+
+  const componentRootPrefixes = [...skillPrefixes, `${root}commands/`, `${root}agents/`, `${root}.claude-plugin/`];
+  const pluginSupportPaths = [...treeByPath.keys()]
+    .filter((path) => path.startsWith(root))
+    .filter((path) => !componentRootPrefixes.some((prefix) => path.startsWith(prefix)))
+    .filter((path) => path !== dotMcpPath)
+    .filter((path) => isInstallableSupportPath(path.slice(root.length)))
+    .sort();
 
   // --- MCP servers -----------------------------------------------------------
   const mcpServers: Record<string, unknown> = {};
@@ -342,7 +383,7 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
     for (const [name, config] of Object.entries(record)) {
       if (!isRecord(config)) continue;
       if (mcpConfigReferencesPluginRoot(config)) {
-        warnings.push(`MCP server "${name}" uses \${CLAUDE_PLUGIN_ROOT} (a plugin-local command), which OpenWork does not support yet. It was skipped.`);
+        warnings.push(`MCP server "${name}" uses \${CLAUDE_PLUGIN_ROOT} (a plugin-local command), which Open One does not support yet. It was skipped.`);
         continue;
       }
       mcpServers[name] = config;
@@ -363,7 +404,6 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
   } else if (isRecord(declaredMcp)) {
     addMcpServers(declaredMcp);
   }
-  const dotMcpPath = `${root}.mcp.json`;
   if (inTree(dotMcpPath)) {
     const text = await fetchGithubText(rawFileUrl(source, ref, dotMcpPath));
     try {
@@ -375,17 +415,20 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
 
   // --- Fetch component contents ----------------------------------------------
   type FetchedComponent = {
-    type: "skill" | "command" | "agent";
+    type: "skill" | "command" | "agent" | "custom";
     path: string;
     title: string;
     description: string | null;
     content: string;
+    relativePath: string | null;
+    extraFiles: Array<{ relativePath: string; content: string; versionId: string | null }>;
   };
 
   const componentInputs = [
     ...skillEntrypoints.map((path) => ({ type: "skill" as const, path })),
     ...commandPaths.map((path) => ({ type: "command" as const, path })),
     ...agentPaths.map((path) => ({ type: "agent" as const, path })),
+    ...pluginSupportPaths.map((path) => ({ type: "custom" as const, path })),
   ];
 
   const fetched = await mapWithConcurrency(componentInputs, 6, async (item): Promise<FetchedComponent> => {
@@ -393,14 +436,25 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
     const { data } = parseFrontmatter(content);
     const fallbackTitle = item.type === "skill"
       ? item.path.split("/").at(-2) ?? "skill"
-      : (item.path.split("/").at(-1) ?? "").replace(/\.md$/, "");
+      : item.type === "custom"
+        ? item.path.slice(root.length)
+        : (item.path.split("/").at(-1) ?? "").replace(/\.md$/, "");
     const frontmatterName = readString(data.name);
+    const extraFiles = item.type === "skill"
+      ? await mapWithConcurrency(skillExtraFilePaths.get(item.path) ?? [], 6, async (path) => ({
+        relativePath: path.slice(item.path.slice(0, -"SKILL.md".length).length),
+        content: await fetchGithubText(rawFileUrl(source, ref, path)),
+        versionId: treeByPath.get(path)?.sha ?? null,
+      }))
+      : [];
     return {
       type: item.type,
       path: item.path,
       title: item.type === "skill" && frontmatterName ? frontmatterName : fallbackTitle,
       description: readString(data.description),
       content,
+      relativePath: item.type === "custom" ? item.path.slice(root.length) : null,
+      extraFiles,
     };
   });
 
@@ -414,13 +468,17 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
       objectType: component.type,
       title: component.title,
       description: component.description,
-      currentRelativePath: null,
+      currentRelativePath: component.path,
       status: "active",
       updatedAt: null,
       latestVersion: {
         id: treeByPath.get(component.path)?.sha ?? component.path,
         rawSourceText: component.content,
-        normalizedPayloadJson: null,
+        normalizedPayloadJson: component.type === "skill" && component.extraFiles.length > 0
+          ? { extraFiles: component.extraFiles }
+          : component.type === "custom" && component.relativePath
+            ? { relativePath: component.relativePath }
+            : null,
       },
     },
   }));
@@ -446,7 +504,7 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
   }
 
   if (memberships.length === 0) {
-    throw new ApiError(400, "plugin_empty", "This plugin has no MCP servers, skills, commands, or agents OpenWork can install.");
+    throw new ApiError(400, "plugin_empty", "This plugin has no MCP servers, skills, commands, or agents Open One can install.");
   }
 
   const resolved: CloudPluginResolved = {
@@ -461,7 +519,11 @@ export async function resolveClaudePluginBundle(input: { url: string; ref?: stri
 
   const components: ClaudePluginComponent[] = [
     ...Object.keys(mcpServers).map((name) => ({ type: "mcp" as const, name, description: null })),
-    ...fetched.map((component) => ({ type: component.type, name: component.title, description: component.description })),
+    ...fetched.map((component) => ({
+      type: component.type === "custom" ? "file" as const : component.type,
+      name: component.title,
+      description: component.description,
+    })),
   ];
 
   return {

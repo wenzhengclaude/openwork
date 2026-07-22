@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { resolveCodexCommand, resolveGrokCommand, resolveRuntimeEnv } from "./runtime-config.js";
+import { grokMcpServers, resolveCodexCommand, resolveCodexModelProvider, resolveGrokCommand, resolveRuntimeEnv } from "./runtime-config.js";
 
 const ENV_KEYS = [
   "OPENONE_CODEX_ARGS",
@@ -16,6 +16,8 @@ const ENV_KEYS = [
   "OPENONE_GROK_HOME",
   "OPENONE_GROK_MODEL",
   "OPENONE_GROK_ALWAYS_APPROVE",
+  "OPENONE_SAPDEV_WORK_DIR",
+  "SAPDEV_AI_WORK_DIR",
   "GROK_COMMAND",
   "XAI_API_KEY",
 ];
@@ -115,6 +117,141 @@ describe("resolveCodexCommand", () => {
       ],
     });
   });
+
+  test("injects shared Open One MCP servers into Codex config", () => {
+    expect(resolveCodexCommand(undefined, undefined, {
+      mcpServers: {
+        "openwork-cloud": {
+          type: "remote",
+          url: "https://mcp.internal/mcp",
+          headers: {
+            Authorization: "Bearer local",
+          },
+          oauth: false,
+        },
+        disabled: {
+          enabled: false,
+          url: "https://disabled.internal/mcp",
+        },
+      },
+      skillRoots: [],
+      skills: [],
+      pluginPaths: [],
+    })).toEqual({
+      command: "codex",
+      args: [
+        "app-server",
+        "-c",
+        'mcp_servers.openwork-cloud.url="https://mcp.internal/mcp"',
+        "-c",
+        'mcp_servers.openwork-cloud.http_headers={ "Authorization" = "Bearer local" }',
+      ],
+    });
+  });
+
+  test("translates Open One local MCP config into Codex native MCP fields", () => {
+    expect(resolveCodexCommand(undefined, undefined, {
+      mcpServers: {
+        sap: {
+          type: "local",
+          command: ["node", "server.js", "--stdio"],
+          environment: {
+            SAP_TOKEN: "secret",
+          },
+        },
+      },
+      skillRoots: [],
+      skills: [],
+      pluginPaths: [],
+    })).toEqual({
+      command: "codex",
+      args: [
+        "app-server",
+        "-c",
+        'mcp_servers.sap.command="node"',
+        "-c",
+        'mcp_servers.sap.args=["server.js", "--stdio"]',
+        "-c",
+        'mcp_servers.sap.env={ "SAP_TOKEN" = "secret" }',
+      ],
+    });
+  });
+});
+
+describe("resolveCodexModelProvider", () => {
+  test("does not pass Open One managed provider ids to Codex without provider config", () => {
+    expect(resolveCodexModelProvider("company-local")).toBeUndefined();
+    expect(resolveCodexModelProvider("company-local-http-models")).toBeUndefined();
+  });
+
+  test("keeps external Codex provider ids without Open One provider config", () => {
+    expect(resolveCodexModelProvider("openai")).toBe("openai");
+  });
+});
+
+describe("grokMcpServers", () => {
+  test("normalizes shared Open One MCP servers for Grok Build sessions", () => {
+    expect(grokMcpServers({
+      mcpServers: {
+        "openwork-cloud": {
+          type: "remote",
+          url: "https://mcp.internal/mcp",
+          headers: {
+            Authorization: "Bearer local",
+          },
+          oauth: false,
+        },
+        disabled: {
+          enabled: false,
+          url: "https://disabled.internal/mcp",
+        },
+      },
+      skillRoots: [],
+      skills: [],
+      pluginPaths: [],
+    })).toEqual([
+      {
+        name: "openwork-cloud",
+        type: "http",
+        url: "https://mcp.internal/mcp",
+        headers: [
+          {
+            name: "Authorization",
+            value: "Bearer local",
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("translates Open One local MCP config into Grok native MCP fields", () => {
+    expect(grokMcpServers({
+      mcpServers: {
+        sap: {
+          type: "local",
+          command: ["node", "server.js", "--stdio"],
+          environment: {
+            SAP_TOKEN: "secret",
+          },
+        },
+      },
+      skillRoots: [],
+      skills: [],
+      pluginPaths: [],
+    })).toEqual([
+      {
+        name: "sap",
+        command: "node",
+        args: ["server.js", "--stdio"],
+        env: [
+          {
+            name: "SAP_TOKEN",
+            value: "secret",
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("resolveGrokCommand", () => {
@@ -187,5 +324,20 @@ describe("resolveRuntimeEnv", () => {
       XAI_API_KEY: "env-key",
       GROK_CODE_XAI_API_KEY: "env-key",
     });
+  });
+
+  test("passes SAP work dir only for selected SAP skills", () => {
+    process.env.OPENONE_SAPDEV_WORK_DIR = "D:\\sap-work";
+
+    expect(resolveRuntimeEnv("CODEX", {}, {
+      prompt: "the \"sap-login\" skill",
+      selectedSkills: ["sap-login"],
+    })).toEqual({
+      SAPDEV_AI_WORK_DIR: "D:\\sap-work",
+    });
+    expect(resolveRuntimeEnv("CODEX", {}, {
+      prompt: "hello",
+      selectedSkills: [],
+    })).toEqual({});
   });
 });

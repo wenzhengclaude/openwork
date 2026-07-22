@@ -57,6 +57,12 @@ mac:
         - opencode
         - opencode-aarch64-apple-darwin
         - opencode-x86_64-apple-darwin
+        - codex
+        - codex-aarch64-apple-darwin
+        - codex-x86_64-apple-darwin
+        - grok
+        - grok-aarch64-apple-darwin
+        - grok-x86_64-apple-darwin
         - openwork-orchestrator
         - openwork-orchestrator-aarch64-apple-darwin
         - openwork-orchestrator-x86_64-apple-darwin
@@ -80,6 +86,12 @@ linux:
         - opencode
         - opencode-aarch64-unknown-linux-gnu
         - opencode-x86_64-unknown-linux-gnu
+        - codex
+        - codex-aarch64-unknown-linux-gnu
+        - codex-x86_64-unknown-linux-gnu
+        - grok
+        - grok-aarch64-unknown-linux-gnu
+        - grok-x86_64-unknown-linux-gnu
         - openwork-orchestrator
         - openwork-orchestrator-aarch64-unknown-linux-gnu
         - openwork-orchestrator-x86_64-unknown-linux-gnu
@@ -100,6 +112,12 @@ win:
         - opencode.exe
         - opencode-aarch64-pc-windows-msvc.exe
         - opencode-x86_64-pc-windows-msvc.exe
+        - codex.exe
+        - codex-aarch64-pc-windows-msvc.exe
+        - codex-x86_64-pc-windows-msvc.exe
+        - grok.exe
+        - grok-aarch64-pc-windows-msvc.exe
+        - grok-x86_64-pc-windows-msvc.exe
         - openwork-orchestrator.exe
         - openwork-orchestrator-aarch64-pc-windows-msvc.exe
         - openwork-orchestrator-x86_64-pc-windows-msvc.exe

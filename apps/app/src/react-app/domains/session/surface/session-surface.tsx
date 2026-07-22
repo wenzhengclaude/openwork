@@ -3,7 +3,7 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
-import { Check, Minimize2 } from "lucide-react";
+import { Check, LoaderCircle, Minimize2 } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 import { captureAnalyticsEvent } from "@/app/lib/analytics";
@@ -13,8 +13,11 @@ import { t } from "@/i18n";
 import { readWorkspaceCloudImports, type CloudImportedPlugin } from "@/app/cloud/import-state";
 import type {
   OpenworkAgentApprovalMode,
+  OpenworkAgentApprovalReply,
+  OpenworkAgentRunAttachment,
   OpenworkAgentRun,
   OpenworkAgentRunMode,
+  OpenworkAgentRuntimeKind,
   OpenworkServerClient,
   OpenworkSessionSnapshot,
 } from "@/app/lib/openwork-server";
@@ -43,7 +46,6 @@ import { decodeComposerMentionValue, encodeComposerMentionValue, type ComposerMe
 import { desktopBridge } from "@/app/lib/desktop";
 import { parseSlashCommandInvocation } from "./composer/slash-command";
 import { DevProfiler } from "@/react-app/shell/dev-profiler";
-import { PaperGrainGradient } from "@openwork/ui/react";
 import { useShellConfig } from "@/react-app/shell/shell-config";
 import { useReactRenderWatchdog } from "@/react-app/shell/react-render-watchdog";
 import { SessionDebugPanel } from "./debug-panel";
@@ -59,8 +61,11 @@ import { getSessionActivityStatusLabel, useSessionActivityStore, type SessionAct
 import { PermissionApprovalPanel } from "@/react-app/domains/session/chat/permission-approval-modal";
 import { QuestionPanel } from "@/react-app/domains/session/modals/question-modal";
 import { QueuedMessagesPanel } from "@/react-app/domains/session/modals/queued-messages-panel";
+import { describeRouteError } from "@/react-app/shell/route-workspaces";
 import { deriveOpenTargets, selectAutoOpenTarget, type OpenTarget } from "@/react-app/domains/session/artifacts/open-target";
 import { usePanelTabStore } from "@/react-app/domains/session/panel/panel-tab-store";
+import type { DiffReviewRequest } from "@/react-app/domains/session/review/diff-review";
+import { syncCloudControlMcpInBackground } from "@/react-app/domains/connections/use-session-mcp-maintenance";
 import {
   seedSessionState,
   snapshotKey as reactSnapshotKey,
@@ -89,7 +94,7 @@ import {
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
-const DEFAULT_COMPOSER_CONTROL_TEXT = "Help me outline the next OpenWork task.";
+const DEFAULT_COMPOSER_CONTROL_TEXT = "Help me outline the next Open One task.";
 const SESSION_SURFACE_SELECTOR = "[data-session-surface-id]";
 
 type SessionError = {
@@ -151,12 +156,13 @@ export type SessionSurfaceProps = {
   onRevertToMessage?: (messageId: string, sessionId: string) => Promise<boolean>;
   onForkAtMessage?: (messageId: string | null, sessionId: string) => void;
   onOpenTarget?: (target: OpenTarget, options?: OpenTargetOptions, sessionId?: string) => void;
+  onOpenDiffReview?: (review: DiffReviewRequest, sessionId?: string) => void;
   environmentRuntimeKey?: string | null;
   onApplyEnvironmentChanges?: () => Promise<ApplyEnvironmentChangesResult>;
 };
 
 function messageToReadableText(message: UIMessage) {
-  const header = message.role === "user" ? "You" : message.role === "assistant" ? "OpenWork" : message.role;
+  const header = message.role === "user" ? "You" : message.role === "assistant" ? "Open One" : message.role;
   const body = message.parts
     .flatMap((part) => {
       if (part.type === "text") return [part.text];
@@ -186,6 +192,10 @@ function isSessionSurfaceMounted(sessionId: string) {
     if (surface.getAttribute("data-session-surface-id") === sessionId) return true;
   }
   return false;
+}
+
+function validContextWindow(value: number | null | undefined): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
 function firstMountedSessionSurfaceId() {
@@ -254,18 +264,7 @@ function AssistantWaitingCard({ label = t("session.assistant_thinking") }: { lab
   return (
     <div className="flex justify-start" role="status" aria-live="polite">
       <div className="inline-flex items-center gap-1.5 px-1 py-1 text-[12px] text-dls-secondary">
-        <div style={{ width: 20, height: 20, borderRadius: "50%", overflow: "hidden" }}>
-          <PaperGrainGradient
-            speed={12}
-            softness={0.1}
-            intensity={1}
-            noise={0.05}
-            shape="sphere"
-            colors={["#818cf8", "#fb7185", "#fbbf24", "#34d399"]}
-            colorBack="#ffffff00"
-            style={{ backgroundColor: "#818cf8", width: "100%", height: "100%", borderRadius: "50%" }}
-          />
-        </div>
+        <LoaderCircle size={16} className="shrink-0 animate-spin text-dls-secondary" />
         <span>{label}</span>
       </div>
     </div>
@@ -443,6 +442,50 @@ function mergeDrafts(drafts: ComposerDraft[]): ComposerDraft | null {
   };
 }
 
+function selectedSkillNames(parts: ComposerPart[]): string[] {
+  const result: string[] = [];
+  for (const part of parts) {
+    if (part.type !== "skill") continue;
+    addSelectedSkillName(result, part.name);
+  }
+  return result;
+}
+
+function addSelectedSkillName(result: string[], name: string) {
+  const trimmed = name.trim();
+  if (trimmed && !result.includes(trimmed)) result.push(trimmed);
+}
+
+function findSkillName(skills: SkillCard[], name: string): string | null {
+  const normalized = name.trim().toLowerCase();
+  if (!normalized) return null;
+  return skills.find((skill) => skill.name.toLowerCase() === normalized)?.name ?? null;
+}
+
+async function agentRunAttachments(attachments: ComposerAttachment[]): Promise<OpenworkAgentRunAttachment[]> {
+  const result: OpenworkAgentRunAttachment[] = [];
+  for (const attachment of attachments) {
+    if (attachment.kind !== "image" || !attachment.mimeType.startsWith("image/")) {
+      throw new Error("Codex and Grok runs currently support uploaded images. Use @file references for other files.");
+    }
+    result.push({
+      name: attachment.name,
+      mime: attachment.mimeType,
+      dataUrl: await attachmentToDataUrl(attachment),
+    });
+  }
+  return result;
+}
+
+async function attachmentToDataUrl(attachment: ComposerAttachment): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Failed to read attachment: ${attachment.name}`));
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsDataURL(new Blob([attachment.file], { type: attachment.mimeType }));
+  });
+}
+
 function toAgentRunMode(mode: ComposerRunMode): OpenworkAgentRunMode | null {
   if (mode === "codex" || mode === "grok-build" || mode === "multi-agent") return mode;
   return null;
@@ -450,6 +493,10 @@ function toAgentRunMode(mode: ComposerRunMode): OpenworkAgentRunMode | null {
 
 function isComposerRunMode(value: unknown): value is ComposerRunMode {
   return value === "opencode" || value === "multi-agent" || value === "codex" || value === "grok-build";
+}
+
+function isActiveAgentRun(run: OpenworkAgentRun): boolean {
+  return run.status === "starting" || run.status === "running";
 }
 
 function upsertAgentRunEvent(run: OpenworkAgentRun, event: OpenworkAgentRun["events"][number]): OpenworkAgentRun {
@@ -467,49 +514,318 @@ function upsertAgentRunEvent(run: OpenworkAgentRun, event: OpenworkAgentRun["eve
   };
 }
 
+type AgentRunApprovalPayload = {
+  id: string;
+  runtime: string;
+  agentId: string;
+  title: string;
+  permission: string;
+  patterns: string[];
+  metadata: Record<string, unknown>;
+  createdAt: number;
+};
+
+type ActiveAgentRunApproval = {
+  runId: string;
+  permission: PendingPermission;
+};
+
+function pendingAgentRunApproval(runs: OpenworkAgentRun[]): ActiveAgentRunApproval | null {
+  for (const run of runs) {
+    if (run.status !== "running" && run.status !== "starting") continue;
+    const pending = new Map<string, AgentRunApprovalPayload>();
+    for (const event of run.events) {
+      if (event.type === "approval_requested") {
+        const approval = approvalPayloadFromEvent(event);
+        if (approval) pending.set(approval.id, approval);
+        continue;
+      }
+      if (event.type === "approval_resolved") {
+        const approvalId = readStringField(event.details, "approvalId");
+        if (approvalId) pending.delete(approvalId);
+      }
+    }
+    const approval = [...pending.values()].sort((left, right) => left.createdAt - right.createdAt)[0];
+    if (approval) {
+      return {
+        runId: run.id,
+        permission: agentApprovalToPendingPermission(run, approval),
+      };
+    }
+  }
+  return null;
+}
+
+function agentApprovalToPendingPermission(run: OpenworkAgentRun, approval: AgentRunApprovalPayload): PendingPermission {
+  return {
+    id: approval.id,
+    sessionID: run.sessionId ?? run.id,
+    permission: approval.permission || "task",
+    patterns: approval.patterns.length > 0 ? approval.patterns : [approval.title],
+    metadata: {
+      ...approval.metadata,
+      runtime: approval.runtime,
+      agent: approval.agentId,
+    },
+    always: {
+      session: true,
+      project: false,
+    },
+    receivedAt: approval.createdAt,
+    protocol: "legacy",
+  };
+}
+
+function approvalPayloadFromEvent(event: OpenworkAgentRun["events"][number]): AgentRunApprovalPayload | null {
+  const details = event.details;
+  if (!isUnknownRecord(details)) return null;
+  const approval = details.approval;
+  if (!isUnknownRecord(approval)) return null;
+  const id = readStringField(approval, "id");
+  if (!id) return null;
+  return {
+    id,
+    runtime: readStringField(approval, "runtime") || event.runtime || "agent",
+    agentId: readStringField(approval, "agentId") || event.agentId || "agent",
+    title: readStringField(approval, "title") || event.title || "Permission request",
+    permission: readStringField(approval, "permission") || "task",
+    patterns: readStringArray(approval.patterns),
+    metadata: isUnknownRecord(approval.metadata) ? approval.metadata : {},
+    createdAt: readNumberField(approval, "createdAt") || event.timestamp,
+  };
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readStringField(value: unknown, key: string): string {
+  if (!isUnknownRecord(value)) return "";
+  const field = value[key];
+  return typeof field === "string" ? field.trim() : "";
+}
+
+function readNumberField(value: unknown, key: string): number {
+  if (!isUnknownRecord(value)) return 0;
+  const field = value[key];
+  return typeof field === "number" && Number.isFinite(field) ? field : 0;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
 function createAgentRunChatMessage(input: {
   runId: string;
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  attachments?: OpenworkAgentRunAttachment[];
 }): UIMessage {
   const id = `agent-run:${input.runId}:${input.role}`;
+  const parts: UIMessage["parts"] = input.attachments?.map((attachment, index) => ({
+    type: "file",
+    url: attachment.dataUrl,
+    filename: attachment.name,
+    mediaType: attachment.mime,
+    providerMetadata: { opencode: { partId: `${id}:attachment:${index}` } },
+  })) ?? [];
+  if (input.text) {
+    parts.push({
+      type: "text",
+      text: input.text,
+      state: "done",
+      providerMetadata: { opencode: { partId: `${id}:text` } },
+    });
+  }
   return {
     id,
     role: input.role,
     metadata: { opencode: { created: input.timestamp } },
-    parts: input.text
-      ? [{
-        type: "text",
-        text: input.text,
-        state: "done",
-        providerMetadata: { opencode: { partId: `${id}:text` } },
-      }]
-      : [],
+    parts,
   };
 }
 
-function appendAgentRunText(messages: UIMessage[], runId: string, delta: string): UIMessage[] {
-  const messageId = `agent-run:${runId}:assistant`;
-  return messages.map((message) => {
-    if (message.id !== messageId) return message;
-    const parts = [...message.parts];
-    const textIndex = parts.findIndex((part) => part.type === "text");
-    if (textIndex >= 0) {
-      const textPart = parts[textIndex];
-      if (textPart?.type === "text") {
-        parts[textIndex] = { ...textPart, text: `${textPart.text}${delta}` };
-      }
-    } else {
-      parts.push({
-        type: "text",
-        text: delta,
-        state: "done",
-        providerMetadata: { opencode: { partId: `${messageId}:text` } },
-      });
+function buildAgentRunChatMessages(runs: OpenworkAgentRun[]): UIMessage[] {
+  const messages: UIMessage[] = [];
+  for (const run of runs.slice().reverse()) {
+    messages.push(createAgentRunChatMessage({
+      runId: run.id,
+      role: "user",
+      text: run.prompt,
+      timestamp: run.createdAt,
+      attachments: run.attachments,
+    }));
+    const assistantText = run.status === "starting" || run.status === "running"
+      ? agentRunAssistantIntro(run)
+      : agentRunAssistantText(run);
+    if (assistantText) {
+      messages.push(createAgentRunChatMessage({
+        runId: run.id,
+        role: "assistant",
+        text: assistantText,
+        timestamp: run.updatedAt || run.createdAt + 1,
+      }));
     }
-    return { ...message, parts };
-  });
+  }
+  return messages;
+}
+
+function agentRunAssistantIntro(_run: OpenworkAgentRun): string {
+  return "";
+}
+
+function agentRunAssistantText(run: OpenworkAgentRun): string {
+  const runtimeText = new Map<OpenworkAgentRuntimeKind, string>();
+  for (const event of run.events) {
+    if (event.type !== "message_delta") continue;
+    if (!event.runtime || !event.text) continue;
+    runtimeText.set(event.runtime, `${runtimeText.get(event.runtime) ?? ""}${event.text}`);
+  }
+  const outputs = runtimeOrder()
+    .flatMap((runtime) => {
+      const text = normalizeAgentRunOutput(runtimeText.get(runtime));
+      return text ? [{ runtime, text }] : [];
+    });
+  if (outputs.length === 1) return outputs[0]?.text ?? "";
+  if (outputs.length > 1) {
+    return [
+      "多智能体协作完成，下面是各智能体的结果：",
+      "",
+      ...outputs.flatMap((output) => [
+        `**${runtimeDisplayName(output.runtime)}**`,
+        "",
+        output.text,
+        "",
+      ]),
+    ].join("\n").trim();
+  }
+  const errors = run.events
+    .filter((event) => event.type === "error")
+    .flatMap((event) => event.text?.trim() ? [`${event.title ?? "Agent error"}: ${event.text.trim()}`] : []);
+  if (errors.length > 0) return `部分智能体没有完成，详情见上方协同面板。\n\n${errors.join("\n")}`;
+  return "";
+}
+
+function normalizeAgentRunOutput(value: string | undefined): string {
+  const text = value?.replace(/\r\n/g, "\n").trim() ?? "";
+  if (!text) return "";
+  const cleaned = text
+    .replace(/^Open One multi-agent collaboration is enabled\.\s*/i, "")
+    .replace(/^Use (Codex|Grok Build) native subagents[^\n]*\n?/i, "")
+    .replace(/^Expose subagent\/task progress[^\n]*\n?/i, "")
+    .replace(/^Keep subagent task names[^\n]*\n?/i, "")
+    .trim();
+  return stripAgentRunProcessPreamble(repairAgentRunPromptExamples(repairAgentRunMarkdownFences(cleaned))).trim();
+}
+
+function stripAgentRunProcessPreamble(value: string): string {
+  const processMarkers = [
+    "我会先",
+    "我已经确认流程",
+    "接下来我会",
+    "现在我会",
+    "工作目录解析",
+    "临时目录",
+    "日志已启动",
+    "选择器初始化",
+    "初始化连接选择器",
+    "只读/初始化探测",
+    "技能文件",
+    "读取它的",
+    "I'll use",
+    "I will use",
+    "Using the selected",
+    "I'll resolve",
+    "I'm rerunning",
+    "I'm setting",
+    "I'm doing",
+    "I'm starting",
+    "I'm initializing",
+    "I'm asking",
+    "sandbox helper failed",
+    "work-directory probe",
+    "connection selector",
+    "per-run scratch",
+    "read its instructions",
+    "work directory",
+    "temporary directory",
+    "probe",
+    "selector",
+  ];
+  const markerHits = processMarkers.filter((marker) => value.includes(marker)).length;
+  if (markerHits < 2) return value;
+
+  const actionMarkers = [
+    "请回复",
+    "请选择",
+    "请提供",
+    "需要你提供",
+    "要继续",
+    "下一步需要",
+    "我需要你",
+    "请告诉我",
+    "I need",
+    "Reply with",
+    "Please provide",
+    "Please send",
+    "Please choose",
+    "Choose",
+  ];
+  const start = lastMarkerIndex(value, actionMarkers);
+  if (start <= 0) return value;
+
+  const trimmed = value.slice(start).trim();
+  return trimmed || value;
+}
+
+function lastMarkerIndex(value: string, markers: string[]): number {
+  let result = -1;
+  for (const marker of markers) {
+    const index = value.lastIndexOf(marker);
+    if (index > result) result = index;
+  }
+  return result;
+}
+
+function repairAgentRunMarkdownFences(value: string): string {
+  const detachedInlineClosers = value.replace(/([^\s`])```([ \t]*)(\n|$)/g, "$1\n```$3");
+  const lines = detachedInlineClosers.split("\n");
+  let openFenceLine = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/^\s*```/.test(lines[index] ?? "")) continue;
+    openFenceLine = openFenceLine === -1 ? index : -1;
+  }
+  if (openFenceLine === -1) return detachedInlineClosers;
+  return lines.filter((_, index) => index !== openFenceLine).join("\n");
+}
+
+function repairAgentRunPromptExamples(value: string): string {
+  return value
+    .split("\n")
+    .map((line) => {
+      const normalized = line.replace(/`{2,}/g, "`");
+      const backtickCount = normalized.length - normalized.replace(/`/g, "").length;
+      const promptExampleLike = backtickCount >= 2 && /帮我|修一下|实现|review|审查|看看|跑测试|页面|项目|需求|报错/.test(normalized);
+      if (!promptExampleLike) return normalized;
+      return normalized
+        .replace(/`+/g, "、")
+        .replace(/、{2,}/g, "、")
+        .replace(/([：:])、/g, "$1 ")
+        .replace(/^、+|、+$/g, "")
+        .replace(/\s*、\s*/g, "、");
+    })
+    .join("\n");
+}
+
+function runtimeOrder(): OpenworkAgentRuntimeKind[] {
+  return ["codex", "grok-build"];
+}
+
+function runtimeDisplayName(runtime: OpenworkAgentRuntimeKind): string {
+  if (runtime === "codex") return "Codex";
+  return "Grok Build";
 }
 
 function appendAgentRunMessages(base: UIMessage[], agentRunMessages: UIMessage[]): UIMessage[] {
@@ -556,7 +872,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [runMode, setRunMode] = useState<ComposerRunMode>("opencode");
   const [approvalMode, setApprovalMode] = useState<OpenworkAgentApprovalMode>("auto-review");
   const [agentRuns, setAgentRuns] = useState<OpenworkAgentRun[]>([]);
-  const [agentRunMessages, setAgentRunMessages] = useState<UIMessage[]>([]);
+  const [agentApprovalReplyBusy, setAgentApprovalReplyBusy] = useState(false);
   const [showDelayedLoading, setShowDelayedLoading] = useState(false);
   const [awaitingAssistantBaseline, setAwaitingAssistantBaseline] = useState<number | null>(null);
   const [rendered, setRendered] = useState<{ sessionId: string; snapshot: OpenworkSessionSnapshot } | null>(null);
@@ -575,6 +891,56 @@ export function SessionSurface(props: SessionSurfaceProps) {
     () => createClient(props.opencodeBaseUrl, undefined, { token: props.openworkToken, mode: "openwork" }),
     [props.opencodeBaseUrl, props.openworkToken],
   );
+  const activeAgentRunApproval = useMemo(() => pendingAgentRunApproval(agentRuns), [agentRuns]);
+  const respondAgentRunApproval = useCallback(async (requestId: string, reply: OpenworkAgentApprovalReply) => {
+    if (!activeAgentRunApproval || activeAgentRunApproval.permission.id !== requestId || agentApprovalReplyBusy) return;
+    setAgentApprovalReplyBusy(true);
+    try {
+      await props.client.replyAgentRunApproval(props.workspaceId, activeAgentRunApproval.runId, requestId, reply);
+    } catch (nextError) {
+      toast.error(t("app.error_request_failed"), {
+        description: describeRouteError(nextError),
+      });
+    } finally {
+      setAgentApprovalReplyBusy(false);
+    }
+  }, [activeAgentRunApproval, agentApprovalReplyBusy, props.client, props.workspaceId]);
+
+  const subscribeAgentRun = useCallback((run: OpenworkAgentRun) => {
+    if (!isActiveAgentRun(run)) return;
+    if (agentRunControllersRef.current.has(run.id)) return;
+    const sessionId = run.sessionId ?? props.sessionId;
+    const controller = new AbortController();
+    agentRunControllersRef.current.set(run.id, controller);
+    useSessionActivityStore.getState().setRunStatus(props.workspaceId, sessionId, { type: "busy" });
+    void props.client.streamAgentRunEvents(
+      props.workspaceId,
+      run.id,
+      (event) => {
+        if (controller.signal.aborted) return;
+        setAgentRuns((current) => current.map((item) => item.id === event.runId ? upsertAgentRunEvent(item, event) : item));
+        if (event.type === "message_delta") {
+          useSessionActivityStore.getState().markAssistantOutput(props.workspaceId, sessionId, undefined, {
+            allowUnknownMessageRole: true,
+          });
+        }
+        if (event.type === "run_completed") {
+          const activeController = agentRunControllersRef.current.get(event.runId);
+          activeController?.abort();
+          agentRunControllersRef.current.delete(event.runId);
+          useSessionActivityStore.getState().setRunStatus(props.workspaceId, sessionId, { type: "idle" });
+        }
+      },
+      { signal: controller.signal },
+    ).catch((nextError) => {
+      if (controller.signal.aborted) return;
+      const message = nextError instanceof Error ? nextError.message : "Agent run stream failed.";
+      setError({ message });
+      setAgentRuns((current) => current.map((item) => item.id === run.id ? { ...item, status: "failed", updatedAt: Date.now() } : item));
+      agentRunControllersRef.current.delete(run.id);
+      useSessionActivityStore.getState().setError(props.workspaceId, sessionId, message);
+    });
+  }, [props.client, props.sessionId, props.workspaceId]);
 
   const snapshotQueryKey = useMemo(
     () => reactSnapshotKey(props.workspaceId, props.sessionId),
@@ -627,19 +993,43 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [props.sessionId]);
 
   useEffect(() => {
+    for (const controller of agentRunControllersRef.current.values()) {
+      controller.abort();
+    }
+    agentRunControllersRef.current.clear();
     hydratedKeyRef.current = null;
     setError(null);
     setSending(false);
     setShowDelayedLoading(false);
     setAwaitingAssistantBaseline(null);
     setAgentRuns([]);
-    setAgentRunMessages([]);
     // Composer draft state lives in the shared store keyed by session id, so
     // switching sessions preserves each session's own in-progress composer.
     autoOpenedTargetRef.current = null;
     initializedAutoOpenSessionRef.current = null;
     setVerifiedOpenTargets([]);
   }, [props.sessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function restoreAgentRuns() {
+      try {
+        const response = await props.client.listAgentRuns(props.workspaceId, { sessionId: props.sessionId });
+        if (cancelled) return;
+        const restoredRuns = response.items;
+        setAgentRuns(restoredRuns);
+        for (const run of restoredRuns) {
+          subscribeAgentRun(run);
+        }
+      } catch {
+        if (!cancelled) setAgentRuns([]);
+      }
+    }
+    void restoreAgentRuns();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.client, props.sessionId, props.workspaceId, subscribeAgentRun]);
 
   // Publish a composer inspector slice so external drivers can read draft
   // state, attachments, mentions, and sending status from the running app.
@@ -703,7 +1093,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     cachedRendered: rendered,
   });
   const liveStatus = statusState ?? snapshot?.status ?? IDLE_STATUS;
-  const activeAgentRun = agentRuns.find((run) => run.status === "starting" || run.status === "running") ?? null;
+  const activeAgentRun = agentRuns.find(isActiveAgentRun) ?? null;
   const agentRunActive = Boolean(activeAgentRun);
   const chatStreaming = sending || agentRunActive || liveStatus.type === "busy" || liveStatus.type === "retry";
   const status = useMemo((): ThreadStatus => {
@@ -728,6 +1118,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const snapshotRenderedMessages = useMemo(
     () => deriveRenderedSessionMessages({ transcriptState, snapshot }),
     [snapshot, transcriptState],
+  );
+  const agentRunMessages = useMemo(
+    () => buildAgentRunChatMessages(agentRuns),
+    [agentRuns],
   );
   const renderedMessages = useMemo(
     () => appendAgentRunMessages(snapshotRenderedMessages, agentRunMessages),
@@ -869,7 +1263,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     for (const part of pasteParts) {
       resolved = resolved.replace(`[pasted text ${part.label}]`, part.text);
     }
-    resolved = resolved.replace(/\[skill ([^\]]+)\]/g, (_match, name: string) => `the \"${name}\" skill`);
+    resolved = resolved.replace(/\[skill ([^\]]+)\]/g, (_match, name: string) => `Load [skill ${name}] and follow its instructions.`);
     for (const value of Object.keys(mentions)) {
       resolved = resolved.replaceAll(`@${encodeComposerMentionValue(value)}`, `@${value}`);
     }
@@ -899,64 +1293,53 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const startAgentRun = useCallback(async (nextDraft: ComposerDraft, draftAttachments: ComposerAttachment[]) => {
     const mode = toAgentRunMode(runMode);
     if (!mode) return false;
-    if (nextDraft.mode !== "prompt" || nextDraft.command) {
+    if (nextDraft.mode !== "prompt") {
       throw new Error("Multi-agent runs support prompt tasks. Use OpenCode for shell and slash commands.");
-    }
-    if (draftAttachments.length > 0) {
-      throw new Error("Multi-agent runs do not support uploaded attachments yet. Use @file references or switch back to OpenCode.");
     }
     const promptText = (nextDraft.resolvedText ?? nextDraft.text).trim();
     if (!promptText) return true;
+    const selectedSkills = selectedSkillNames(nextDraft.parts);
+    if (nextDraft.command) {
+      const cachedSkillName = findSkillName(toolSkills, nextDraft.command.name);
+      let commandSkillName = cachedSkillName;
+      if (!commandSkillName) {
+        const response = await props.client.listSkills(props.workspaceId, { includeGlobal: true });
+        const nextSkills = (response.items ?? []).map((skill) => ({
+          name: skill.name,
+          path: skill.path,
+          description: skill.description,
+          trigger: skill.trigger,
+        } satisfies SkillCard));
+        setToolSkills(nextSkills);
+        commandSkillName = findSkillName(nextSkills, nextDraft.command.name);
+      }
+      if (!commandSkillName) {
+        throw new Error("Multi-agent runs support prompt tasks. Use OpenCode for shell and slash commands.");
+      }
+      addSelectedSkillName(selectedSkills, commandSkillName);
+    }
+    const attachments = await agentRunAttachments(draftAttachments);
+    const modelContextWindow = validContextWindow(props.modelContextWindow);
 
+    await syncCloudControlMcpInBackground({
+      client: props.client,
+      workspaceId: props.workspaceId,
+    });
     const created = await props.client.createAgentRun(props.workspaceId, {
       mode,
       approvalMode,
       prompt: promptText,
       model: props.selectedModel.modelID,
       modelProvider: props.selectedModel.providerID,
+      ...(modelContextWindow ? { modelContextWindow } : {}),
       sessionId: props.sessionId,
+      ...(selectedSkills.length > 0 ? { selectedSkills } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
-    setAgentRuns((current) => [created.run, ...current.filter((run) => run.id !== created.run.id)].slice(0, 4));
-    setAgentRunMessages((current) => [
-      ...current,
-      createAgentRunChatMessage({ runId: created.run.id, role: "user", text: promptText, timestamp: Date.now() }),
-      createAgentRunChatMessage({ runId: created.run.id, role: "assistant", text: "", timestamp: Date.now() + 1 }),
-    ]);
-    const controller = new AbortController();
-    agentRunControllersRef.current.set(created.run.id, controller);
-    void props.client.streamAgentRunEvents(
-      props.workspaceId,
-      created.run.id,
-      (event) => {
-        setAgentRuns((current) => current.map((run) => run.id === event.runId ? upsertAgentRunEvent(run, event) : run));
-        if (event.type === "message_delta") {
-          if (event.text) {
-            setAgentRunMessages((current) => appendAgentRunText(current, event.runId, event.text ?? ""));
-          }
-          useSessionActivityStore.getState().markAssistantOutput(props.workspaceId, props.sessionId, undefined, {
-            allowUnknownMessageRole: true,
-          });
-        }
-        if (event.type === "error" && event.text) {
-          setAgentRunMessages((current) => appendAgentRunText(current, event.runId, `\n\n${event.title ? `${event.title}: ` : ""}${event.text}`));
-        }
-        if (event.type === "run_completed") {
-          const activeController = agentRunControllersRef.current.get(event.runId);
-          activeController?.abort();
-          agentRunControllersRef.current.delete(event.runId);
-          useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
-        }
-      },
-      { signal: controller.signal },
-    ).catch((nextError) => {
-      if (controller.signal.aborted) return;
-      const message = nextError instanceof Error ? nextError.message : "Agent run stream failed.";
-      setError({ message });
-      setAgentRunMessages((current) => appendAgentRunText(current, created.run.id, `\n\n${message}`));
-      useSessionActivityStore.getState().setError(props.workspaceId, props.sessionId, message);
-    });
+    setAgentRuns((current) => [created.run, ...current.filter((run) => run.id !== created.run.id)]);
+    subscribeAgentRun(created.run);
     return true;
-  }, [approvalMode, props.client, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, runMode]);
+  }, [approvalMode, props.client, props.selectedModel.modelID, props.selectedModel.providerID, props.sessionId, props.workspaceId, runMode, subscribeAgentRun, toolSkills]);
 
   // Core sender shared by initial send and steered follow-ups. OpenCode
   // accepts follow-up user turns mid-run (steering) — the running loop picks
@@ -1077,6 +1460,31 @@ export function SessionSurface(props: SessionSurfaceProps) {
       useSessionActivityStore.getState().setRunStatus(props.workspaceId, props.sessionId, { type: "idle" });
     });
   }, [props.client, props.sessionId, props.workspaceId]);
+
+  const agentRunByAnchorMessageId = useMemo(
+    () => new Map(agentRuns.map((run) => {
+      const assistantText = run.status === "starting" || run.status === "running"
+        ? agentRunAssistantIntro(run)
+        : agentRunAssistantText(run);
+      const anchorRole = assistantText ? "assistant" : "user";
+      return [`agent-run:${run.id}:${anchorRole}`, run];
+    })),
+    [agentRuns],
+  );
+
+  const handleOpenDiffReview = useCallback((review: DiffReviewRequest) => {
+    props.onOpenDiffReview?.(review, props.sessionId);
+  }, [props.onOpenDiffReview, props.sessionId]);
+
+  const renderAgentRunAfterMessage = useCallback((message: UIMessage) => {
+    const run = agentRunByAnchorMessageId.get(message.id);
+    if (!run) return null;
+    return (
+      <div className="mx-auto w-full max-w-3xl px-2 pb-2 pt-1 md:px-10">
+        <AgentRunTimeline run={run} onCancel={handleCancelAgentRun} onOpenDiffReview={handleOpenDiffReview} />
+      </div>
+    );
+  }, [agentRunByAnchorMessageId, handleCancelAgentRun, handleOpenDiffReview]);
 
   const handleDismissError = useCallback(() => {
     setError(null);
@@ -1583,13 +1991,6 @@ export function SessionSurface(props: SessionSurfaceProps) {
           {/* Chat column: tighter than the composer (800px) so messages
                keep a comfortable reading width and don't feel "too big". */}
           <div ref={contentRef} className="mx-auto w-full max-w-[720px]">
-            {agentRuns.length > 0 ? (
-              <div className="space-y-3 pb-3">
-                {agentRuns.map((run) => (
-                  <AgentRunTimeline key={run.id} run={run} onCancel={handleCancelAgentRun} />
-                ))}
-              </div>
-            ) : null}
             {showDelayedLoading && pendingSessionLoad ? (
               <div className="px-6 py-16">
                 <div className="mx-auto max-w-sm rounded-3xl border border-dls-border bg-dls-hover/60 px-8 py-10 text-center">
@@ -1646,6 +2047,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       onRevertToUserMessage={handleRevertToUserMessage}
                       onForkAtMessage={handleForkAtMessage}
                       onEditUserMessage={handleEditUserMessage}
+                      onOpenDiffReview={handleOpenDiffReview}
+                      renderAfterMessage={renderAgentRunAfterMessage}
                     >
                       <MessageList
                         messages={renderedMessages}
@@ -1772,6 +2175,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     permission={props.activePermission}
                     busy={props.permissionReplyBusy}
                     respondPermission={props.respondPermission}
+                    safeStringify={props.safeStringify}
+                  />
+                ) : null}
+                {!props.activePermission && activeAgentRunApproval ? (
+                  <PermissionApprovalPanel
+                    permission={activeAgentRunApproval.permission}
+                    busy={agentApprovalReplyBusy}
+                    respondPermission={respondAgentRunApproval}
                     safeStringify={props.safeStringify}
                   />
                 ) : null}

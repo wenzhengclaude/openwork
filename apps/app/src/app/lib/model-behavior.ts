@@ -24,6 +24,10 @@ const VARIANT_DEFAULT_SCORE: Record<string, number> = {
   xhigh: 5,
   max: 6,
 };
+const COMPANY_LOCAL_PROVIDER_ID = "company-local";
+const COMPANY_LOCAL_PROVIDER_ID_PREFIX = `${COMPANY_LOCAL_PROVIDER_ID}-`;
+const COMPANY_LOCAL_DEFAULT_REASONING_VARIANTS = ["low", "medium", "high", "xhigh"] as const;
+const COMPANY_LOCAL_REASONING_MODEL_PATTERN = /^(?:gpt[-_.]?5(?:[-_.][a-z0-9]+)*|codex(?:[-_.][a-z0-9]+)*)$/i;
 
 function defaultBehaviorOption(): ModelBehaviorOption {
   return {
@@ -68,6 +72,25 @@ const getVariantKeys = (model: ProviderModel) => {
     return normalized ? [normalized] : [];
   });
   return Array.from(new Set(keys));
+};
+
+function isCompanyLocalProvider(providerID: string): boolean {
+  const normalized = providerID.trim().toLowerCase();
+  return normalized === COMPANY_LOCAL_PROVIDER_ID || normalized.startsWith(COMPANY_LOCAL_PROVIDER_ID_PREFIX);
+}
+
+function isCompanyLocalReasoningModel(modelID?: string | null): boolean {
+  const normalized = modelID?.trim();
+  return normalized ? COMPANY_LOCAL_REASONING_MODEL_PATTERN.test(normalized) : false;
+}
+
+const getModelVariantKeys = (providerID: string, model: ProviderModel, modelID?: string | null) => {
+  const explicitVariantKeys = getVariantKeys(model);
+  if (explicitVariantKeys.length > 0) return explicitVariantKeys;
+  if (isCompanyLocalProvider(providerID) && (model.capabilities?.reasoning || isCompanyLocalReasoningModel(modelID))) {
+    return [...COMPANY_LOCAL_DEFAULT_REASONING_VARIANTS];
+  }
+  return explicitVariantKeys;
 };
 
 const sortVariantKeys = (keys: string[]) =>
@@ -186,8 +209,9 @@ export const getModelBehaviorOptions = (
   providerID: string,
   model: ProviderModel,
   providerName?: string | null,
+  modelID?: string | null,
 ): ModelBehaviorOption[] => {
-  const variantKeys = sortVariantKeys(getVariantKeys(model));
+  const variantKeys = sortVariantKeys(getModelVariantKeys(providerID, model, modelID));
   if (!variantKeys.length) return [];
   return [
     defaultBehaviorOption(),
@@ -202,18 +226,19 @@ export const getModelBehaviorOptions = (
   ];
 };
 
-const getDefaultModelBehaviorValue = (model: ProviderModel) =>
-  getDefaultVariantKey(sortVariantKeys(getVariantKeys(model)));
+const getDefaultModelBehaviorValue = (providerID: string, model: ProviderModel, modelID?: string | null) =>
+  getDefaultVariantKey(sortVariantKeys(getModelVariantKeys(providerID, model, modelID)));
 
 export const sanitizeModelBehaviorValue = (
   providerID: string,
   model: ProviderModel,
   value: string | null,
   providerName?: string | null,
+  modelID?: string | null,
 ) => {
   const normalized = normalizeModelBehaviorValue(value);
   if (!normalized) return null;
-  return getModelBehaviorOptions(providerID, model, providerName).some((option) => option.value === normalized)
+  return getModelBehaviorOptions(providerID, model, providerName, modelID).some((option) => option.value === normalized)
     ? normalized
     : null;
 };
@@ -223,12 +248,13 @@ export const getModelBehaviorSummary = (
   model: ProviderModel,
   value: string | null,
   providerName?: string | null,
+  modelID?: string | null,
 ) => {
-  const options = getModelBehaviorOptions(providerID, model, providerName);
-  const sanitized = sanitizeModelBehaviorValue(providerID, model, value, providerName);
-  const selectedValue = sanitized ?? getDefaultModelBehaviorValue(model);
+  const options = getModelBehaviorOptions(providerID, model, providerName, modelID);
+  const sanitized = sanitizeModelBehaviorValue(providerID, model, value, providerName, modelID);
+  const selectedValue = sanitized ?? getDefaultModelBehaviorValue(providerID, model, modelID);
   const selected = options.find((option) => option.value === selectedValue) ?? options[0] ?? null;
-  const title = getBehaviorTitle(providerID, model, getVariantKeys(model), providerName);
+  const title = getBehaviorTitle(providerID, model, getModelVariantKeys(providerID, model, modelID), providerName);
 
   if (options.length > 0) {
     return {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { z } from "zod";
 
 import { OpenWorkExtensionsPreview } from "./openwork-extensions-preview.js";
+import * as runtimeExports from "./openwork-extensions-preview.js";
 
 const originalServerUrl = process.env.OPENWORK_SERVER_URL;
 const originalServerToken = process.env.OPENWORK_SERVER_TOKEN;
@@ -128,6 +129,13 @@ function startFakeOpenWorkServer() {
 }
 
 describe("OpenWorkExtensionsPreview session tools", () => {
+  test("keeps the OpenCode plugin entrypoint exports loadable as plugin factories", () => {
+    expect(Object.entries(runtimeExports)).toEqual([
+      ["OpenWorkExtensionsPreview", OpenWorkExtensionsPreview],
+    ]);
+    expect(Object.values(runtimeExports).every((value) => typeof value === "function")).toBe(true);
+  });
+
   test("searches past chat transcript text and prefers the user's matching message", async () => {
     const fake = startFakeOpenWorkServer();
     const plugin = await OpenWorkExtensionsPreview();

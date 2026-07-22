@@ -153,7 +153,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "Failed to restore OpenWork Cloud session.",
+          : "Failed to restore Open One Cloud session.",
       );
       updateStatus(failureStatus);
     }

@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, BookOpen, MessageCircleMore, Settings, Sparkles, X } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, BookOpen, LoaderCircle, MessageCircleMore, Settings, Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { usePlatform } from "../../../kernel/platform";
 import { useDenAuth } from "../../cloud/den-auth-provider";
 import { useControlAction, type OpenworkControlAction } from "../../../shell/control/control-provider";
 import { useShellConfig } from "../../../shell/shell-config";
+import { useElectronUpdater } from "../../settings/state/electron-updater-provider";
 import type { OpenworkServerStatus } from "../../../../app/lib/openwork-server";
 import {
   getOpenWorkModelsActionUrl,
@@ -110,18 +111,18 @@ function StatusIndicator(props: StatusIndicatorProps) {
 
   if (props.clientConnected) {
     return (
-      <div className="flex min-w-0 items-center gap-2.5">
+      <div className="inline-flex h-6 max-w-[min(18rem,48vw)] min-w-0 items-center gap-1.5 rounded-full border border-border/70 bg-muted/35 px-2.5 text-xs text-muted-foreground">
         <Tooltip>
           <TooltipTrigger render={<span className="inline-flex" />}>
             <StatusDot variant="connected" />
           </TooltipTrigger>
           <TooltipContent>{t("status.connected")}</TooltipContent>
         </Tooltip>
-        <span className="truncate text-muted-foreground text-xs">
+        <span className="truncate font-medium text-foreground/80">
           {t("status.ready_for_tasks")}
         </span>
         {props.developerMode ? (
-          <span className="truncate text-muted-foreground text-xs">
+          <span className="rounded-full bg-background/70 px-1.5 text-[10px] font-medium text-muted-foreground">
             {t("status.developer_mode")}
           </span>
         ) : null}
@@ -175,11 +176,13 @@ export type StatusBarProps = {
 export function StatusBar(props: StatusBarProps) {
   const platform = usePlatform();
   const denAuth = useDenAuth();
+  const updater = useElectronUpdater();
   const navigate = useNavigate();
   const { config: shellConfig } = useShellConfig();
   const docsButtonRef = useRef<HTMLButtonElement>(null);
   const feedbackButtonRef = useRef<HTMLButtonElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const updateButtonRef = useRef<HTMLButtonElement>(null);
   const [openWorkModelsHintVisible, setOpenWorkModelsHintVisible] = useState(false);
   const hasOpenWorkModels = useMemo(
     () => hasOpenWorkModelsProvider(props.providerConnectedIds),
@@ -261,7 +264,7 @@ export function StatusBar(props: StatusBarProps) {
 
   const docsControlAction = useMemo<OpenworkControlAction>(() => ({
     id: "status.docs.open",
-    label: "Open OpenWork docs",
+    label: "Open One docs",
     description: "Open the documentation from the status bar.",
     sideEffect: "external",
     targetRef: docsButtonRef,
@@ -272,7 +275,7 @@ export function StatusBar(props: StatusBarProps) {
   const feedbackControlAction = useMemo<OpenworkControlAction>(() => ({
     id: "status.feedback.open",
     label: "Send feedback",
-    description: "Open the OpenWork feedback surface from the status bar.",
+    description: "Open the Open One feedback surface from the status bar.",
     sideEffect: "external",
     targetRef: feedbackButtonRef,
     execute: props.onSendFeedback,
@@ -289,6 +292,48 @@ export function StatusBar(props: StatusBarProps) {
     execute: props.onOpenSettings,
   }), [props.onOpenSettings, props.settingsOpen, props.showSettingsButton]);
   useControlAction(settingsControlAction);
+
+  const updateState = updater.updateStatus?.state ?? "idle";
+  const updateVersion = updater.updateStatus?.version ?? null;
+  const updateDownloadedBytes = updater.updateStatus?.downloadedBytes ?? 0;
+  const updateTotalBytes = updater.updateStatus?.totalBytes ?? null;
+  const updatePercent = updateTotalBytes && updateTotalBytes > 0
+    ? Math.min(99, Math.max(1, Math.round((updateDownloadedBytes / updateTotalBytes) * 100)))
+    : null;
+  const showUpdateButton = updateState === "available" || updateState === "downloading" || updateState === "ready";
+  const updateButtonLabel = updateState === "ready"
+    ? t("settings.update")
+    : updateState === "downloading"
+      ? updatePercent != null
+        ? `${updatePercent}%`
+        : t("settings.update_downloading")
+      : t("settings.update_download_button");
+  const updateButtonTitle = updateState === "ready"
+    ? t("settings.update_ready_version", undefined, { version: updateVersion ?? "" })
+    : updateState === "downloading"
+      ? t("settings.update_downloading")
+      : t("settings.update_available_version", undefined, { version: updateVersion ?? "" });
+
+  const handleUpdateButtonClick = useCallback(() => {
+    if (updateState === "ready") {
+      void updater.installUpdateAndRestart();
+      return;
+    }
+    if (updateState === "available") {
+      void updater.downloadUpdate();
+    }
+  }, [updateState, updater]);
+
+  const updateControlAction = useMemo<OpenworkControlAction>(() => ({
+    id: "status.update.install",
+    label: updateState === "available" ? "Download available update" : "Install downloaded update",
+    description: "Use the visible update button in the status bar.",
+    sideEffect: updateState === "ready" ? "mutation" : "external",
+    disabled: updateState !== "available" && updateState !== "ready",
+    targetRef: updateButtonRef,
+    execute: handleUpdateButtonClick,
+  }), [handleUpdateButtonClick, updateState]);
+  useControlAction(updateControlAction);
 
   return (
     <div className="border-t border-border bg-background">
@@ -375,6 +420,36 @@ export function StatusBar(props: StatusBarProps) {
                 )}
               />
               <TooltipContent>{t("status.settings")}</TooltipContent>
+            </Tooltip>
+          ) : null}
+          {showUpdateButton ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={(
+                  <Button
+                    ref={updateButtonRef}
+                    className={cn(
+                      "gap-1.5 rounded-full px-2.5 text-xs font-semibold shadow-sm",
+                      updateState === "downloading"
+                        ? "bg-blue-3 text-blue-11 hover:bg-blue-3"
+                        : "bg-blue-9 text-white hover:bg-blue-10",
+                    )}
+                    variant="ghost"
+                    size="xs"
+                    onClick={handleUpdateButtonClick}
+                    disabled={updateState === "downloading"}
+                    aria-label={updateButtonTitle}
+                  >
+                    {updateState === "downloading" ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : (
+                      <ArrowDownToLine className="size-3.5" />
+                    )}
+                    <span>{updateButtonLabel}</span>
+                  </Button>
+                )}
+              />
+              <TooltipContent>{updateButtonTitle}</TooltipContent>
             </Tooltip>
           ) : null}
         </div>

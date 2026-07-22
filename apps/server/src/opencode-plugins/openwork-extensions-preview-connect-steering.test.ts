@@ -8,16 +8,16 @@ import {
   resetOpenWorkExtensionDiscoveryInstructionCacheForTests,
   resolveOpenWorkExtensionDiscoveryInstruction,
   type OpenWorkExtensionConnectState,
-} from "./openwork-extensions-preview.js";
+} from "./openwork-extensions-preview-instructions.js";
 
 const originalServerUrl = process.env.OPENWORK_SERVER_URL;
 const originalServerToken = process.env.OPENWORK_SERVER_TOKEN;
 
 const UNCHANGED_EXTENSION_DISCOVERY_INSTRUCTION =
-  "If the user asks for something you cannot do with obvious built-in tools, check OpenWork extensions before saying the capability is unavailable. Use openwork_extension_list_actions to inspect available extension actions, then call the matching action with openwork_extension_call.";
+  "If the user asks for something you cannot do with obvious built-in tools, check Open One extensions before saying the capability is unavailable. Use openwork_extension_list_actions to inspect available extension actions, then call the matching action with openwork_extension_call.";
 
 const CLOUD_CONNECTION_INSTRUCTION =
-  "The OpenWork Cloud connection is active. For email (Gmail), calendar, Google Drive, and org-connected services such as Notion, Linear, Slack, etc., FIRST call openwork-cloud_search_capabilities with 2-4 keyword variants, then call openwork-cloud_execute_capability with an exact returned name. Do not claim these are unavailable without searching. OpenWork extensions (openwork_extension_list_actions / openwork_extension_call) remain available for other local actions such as image generation, but do NOT use them for Google Workspace, and never direct the user to Settings > Extensions for Google Workspace; use Settings > Connect. A successful search proves OpenWork Cloud itself is authorized, so never tell the user to reconnect OpenWork Cloud because a downstream connector failed. If a result has kind connection_status, name connectionStatus.connectionName and relay connectionStatus.action exactly: use Your Connections for the member, the organization Connections dashboard for an org admin, or the provider admin console for a provider-side failure. After the requested human fixes that connector, search again in the same task. Do not try browser_* or openwork_ui_* workarounds or repeat the same call unchanged; results are live, not cached, so unchanged retries return the same error.";
+  "The Open One Cloud connection is active. For email (Gmail), calendar, Google Drive, and org-connected services such as Notion, Linear, Slack, etc., FIRST call openwork-cloud_search_capabilities with 2-4 keyword variants, then call openwork-cloud_execute_capability with an exact returned name. Do not claim these are unavailable without searching. Open One extensions (openwork_extension_list_actions / openwork_extension_call) remain available for other local actions such as image generation, but do NOT use them for Google Workspace, and never direct the user to Settings > Extensions for Google Workspace; use Settings > Connect. A successful search proves Open One Cloud itself is authorized, so never tell the user to reconnect Open One Cloud because a downstream connector failed. If a result has kind connection_status, name connectionStatus.connectionName and relay connectionStatus.action exactly: use Your Connections for the member, the organization Connections dashboard for an org admin, or the provider admin console for a provider-side failure. After the requested human fixes that connector, search again in the same task. Do not try browser_* or openwork_ui_* workarounds or repeat the same call unchanged; results are live, not cached, so unchanged retries return the same error.";
 
 const GOOGLE_WORKSPACE_DISCONNECTED_INSTRUCTION =
   `${UNCHANGED_EXTENSION_DISCOVERY_INSTRUCTION} Google Workspace is not connected on this device; if the user asks for email, calendar, or Google Drive, tell them to connect their account in Settings > Connect (never Settings > Extensions).`;
@@ -69,7 +69,7 @@ describe("composeOpenWorkExtensionDiscoveryInstruction", () => {
 
     expect(OPENWORK_CLOUD_CONNECTION_INSTRUCTION).toBe(CLOUD_CONNECTION_INSTRUCTION);
     expect(OPENWORK_CLOUD_CONNECTION_INSTRUCTION).toContain("relay connectionStatus.action exactly");
-    expect(OPENWORK_CLOUD_CONNECTION_INSTRUCTION).toContain("never tell the user to reconnect OpenWork Cloud");
+    expect(OPENWORK_CLOUD_CONNECTION_INSTRUCTION).toContain("never tell the user to reconnect Open One Cloud");
     expect(OPENWORK_CLOUD_CONNECTION_INSTRUCTION).toContain("connectionStatus.connectionName");
     expect(OPENWORK_CLOUD_CONNECTION_INSTRUCTION).toContain("browser_* or openwork_ui_* workarounds");
     expect(OPENWORK_CLOUD_CONNECTION_INSTRUCTION).toContain("results are live, not cached");

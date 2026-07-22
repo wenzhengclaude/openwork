@@ -73,7 +73,7 @@ function getEffortTheme(value: string, label: string): EffortTheme {
     };
   }
 
-  if (/medium|balanced|standard|中|标准/.test(effort)) {
+  if (/medium|balanced|standard|均衡|标准/.test(effort)) {
     return {
       accent: "#0f8bc3",
       track: "linear-gradient(102deg, #238fd7 0%, #4dbbe8 100%)",
@@ -176,10 +176,10 @@ export function ModelBehaviorSelect({
               type="button"
               disabled={disabled}
               aria-label={t("composer.behavior_label")}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-transparent px-2.5 text-sm font-medium text-gray-12 transition-colors hover:bg-gray-4 disabled:pointer-events-none disabled:opacity-60"
+              className="inline-flex h-9 min-w-0 max-w-[8.5rem] items-center gap-1.5 rounded-full bg-transparent px-2.5 text-sm font-medium text-gray-12 transition-colors hover:bg-gray-4 disabled:pointer-events-none disabled:opacity-60"
             >
               <Gauge className="size-3.5" style={{ color: effortTheme.accent }} />
-              <span className="max-w-28 truncate" style={{ color: effortTheme.accent }}>{selected.label || label}</span>
+              <span className="min-w-0 max-w-24 truncate" style={{ color: effortTheme.accent }}>{selected.label || label}</span>
               <ChevronDown className="size-4 text-gray-10" />
             </PopoverTrigger>
           }

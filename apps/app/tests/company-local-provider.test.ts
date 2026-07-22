@@ -7,6 +7,7 @@ import {
   resolveCompanyLocalProviderId,
   resolveCompanyLocalReasoningEffort,
   setCompanyLocalModelImageInput,
+  setCompanyLocalModelReasoningEfforts,
 } from "../src/react-app/domains/settings/company-local-provider";
 
 describe("company local provider config", () => {
@@ -31,15 +32,17 @@ describe("company local provider config", () => {
     });
   });
 
-  test("adds real reasoning variants and reported token limits for compatible models", () => {
+  test("adds returned reasoning variants and reported token limits for compatible models", () => {
     const baseUrl = "https://models.example.test/v1";
     expect(buildCompanyLocalProviderConfig({
       baseUrl,
       models: [{
-        id: "gpt-5.5",
-        name: "GPT-5.5",
+        id: "company-reasoning",
+        name: "Company Reasoning",
         contextWindow: 353_000,
         outputLimit: 32_000,
+        reasoning: true,
+        reasoningEfforts: ["low", "medium", "high", "xhigh"],
       }],
     })).toEqual({
       [resolveCompanyLocalProviderId(baseUrl)]: {
@@ -47,8 +50,8 @@ describe("company local provider config", () => {
         name: `${COMPANY_LOCAL_PROVIDER_NAME} (https://models.example.test/v1)`,
         options: { baseURL: "https://models.example.test/v1" },
         models: {
-          "gpt-5.5": {
-            name: "GPT-5.5",
+          "company-reasoning": {
+            name: "Company Reasoning",
             limit: { context: 353_000, output: 32_000 },
             capabilities: { reasoning: true },
             variants: {
@@ -61,8 +64,59 @@ describe("company local provider config", () => {
         },
       },
     });
-    expect(resolveCompanyLocalReasoningEffort(resolveCompanyLocalProviderId(baseUrl), "gpt-5.5", "high")).toBe("high");
-    expect(resolveCompanyLocalReasoningEffort(resolveCompanyLocalProviderId(baseUrl), "claude-opus", "high")).toBeUndefined();
+    expect(resolveCompanyLocalReasoningEffort(resolveCompanyLocalProviderId(baseUrl), "company-reasoning", "high")).toBe("high");
+    expect(resolveCompanyLocalReasoningEffort("openai", "company-reasoning", "high")).toBeUndefined();
+  });
+
+  test("does not infer reasoning controls from a model name alone", () => {
+    const baseUrl = "https://models.example.test/v1";
+    expect(buildCompanyLocalProviderConfig({
+      baseUrl,
+      models: [{ id: "gpt-5.5", name: "GPT-5.5" }],
+    })).toEqual({
+      [resolveCompanyLocalProviderId(baseUrl)]: {
+        npm: "@ai-sdk/openai-compatible",
+        name: `${COMPANY_LOCAL_PROVIDER_NAME} (https://models.example.test/v1)`,
+        options: { baseURL: "https://models.example.test/v1" },
+        models: {
+          "gpt-5.5": {
+            name: "GPT-5.5",
+            modalities: { input: ["text", "image"], output: ["text"] },
+            attachment: true,
+          },
+        },
+      },
+    });
+  });
+
+  test("allows admins to confirm reasoning effort support when a relay omits metadata", () => {
+    const baseUrl = "https://models.example.test/v1";
+    const model = setCompanyLocalModelReasoningEfforts({ id: "gpt-5.5", name: "GPT-5.5" }, true);
+
+    expect(buildCompanyLocalProviderConfig({
+      baseUrl,
+      models: [model],
+    })).toEqual({
+      [resolveCompanyLocalProviderId(baseUrl)]: {
+        npm: "@ai-sdk/openai-compatible",
+        name: `${COMPANY_LOCAL_PROVIDER_NAME} (https://models.example.test/v1)`,
+        options: { baseURL: "https://models.example.test/v1" },
+        models: {
+          "gpt-5.5": {
+            name: "GPT-5.5",
+            capabilities: { reasoning: true },
+            variants: {
+              low: { reasoningEffort: "low" },
+              medium: { reasoningEffort: "medium" },
+              high: { reasoningEffort: "high" },
+              xhigh: { reasoningEffort: "xhigh" },
+            },
+            modalities: { input: ["text", "image"], output: ["text"] },
+            attachment: true,
+          },
+        },
+      },
+    });
   });
 
   test("persists image input support for multimodal models", () => {

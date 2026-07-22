@@ -2,19 +2,19 @@
 import {
   ArrowRight,
   ArrowUpRight,
-  Cable,
-  Cloud,
-  Cog,
-  FolderLock,
+  ArchiveRestore,
+  Blocks,
+  FolderKey,
+  IdCard,
+  KeyRound,
   LifeBuoy,
+  MonitorCog,
   MessageCircle,
-  Paintbrush,
-  Puzzle,
-  RefreshCcw,
-  ShieldCheck,
-  Sparkles,
-  Terminal,
-  Wrench,
+  Network,
+  PackageCheck,
+  ServerCog,
+  SlidersHorizontal,
+  SwatchBook,
 } from "lucide-react";
 
 import { t } from "../../../../i18n";
@@ -29,25 +29,25 @@ export type GeneralSettingsViewProps = {
   onReportIssue: () => void;
 };
 
-type SettingsCardDefinition = { tab: SettingsTab; icon: typeof Sparkles } & (
+type SettingsCardDefinition = { tab: SettingsTab; icon: typeof SlidersHorizontal } & (
   { titleKey: string; descKey: string }
 );
 
 const workspaceCards: SettingsCardDefinition[] = [
-  { tab: "preferences", icon: Cog, titleKey: "settings.tab_preferences", descKey: "settings.tab_description_preferences" },
-  { tab: "permissions", icon: FolderLock, titleKey: "settings.tab_permissions", descKey: "settings.tab_description_permissions" },
-  { tab: "extensions", icon: Puzzle, titleKey: "settings.tab_extensions", descKey: "settings.tab_description_extensions" },
-  { tab: "advanced", icon: Wrench, titleKey: "settings.tab_advanced", descKey: "settings.tab_description_advanced" },
+  { tab: "preferences", icon: SlidersHorizontal, titleKey: "settings.tab_preferences", descKey: "settings.tab_description_preferences" },
+  { tab: "permissions", icon: FolderKey, titleKey: "settings.tab_permissions", descKey: "settings.tab_description_permissions" },
+  { tab: "extensions", icon: Blocks, titleKey: "settings.tab_extensions", descKey: "settings.tab_description_extensions" },
+  { tab: "advanced", icon: MonitorCog, titleKey: "settings.tab_advanced", descKey: "settings.tab_description_advanced" },
 ];
 
 const globalCards: SettingsCardDefinition[] = [
-  { tab: "ai", icon: Sparkles, titleKey: "settings.tab_ai", descKey: "settings.tab_description_ai" },
-  { tab: "cloud-account", icon: Cloud, titleKey: "settings.tab_cloud_account", descKey: "settings.tab_description_cloud_account" },
-  { tab: "connect", icon: Cable, titleKey: "settings.tab_connect", descKey: "settings.tab_description_connect" },
-  { tab: "appearance", icon: Paintbrush, titleKey: "settings.tab_appearance", descKey: "settings.tab_description_appearance" },
-  { tab: "environment", icon: Terminal, titleKey: "settings.tab_environment", descKey: "settings.tab_description_environment" },
-  { tab: "updates", icon: RefreshCcw, titleKey: "settings.tab_updates", descKey: "settings.tab_description_updates" },
-  { tab: "recovery", icon: ShieldCheck, titleKey: "settings.tab_recovery", descKey: "settings.tab_description_recovery" },
+  { tab: "ai", icon: ServerCog, titleKey: "settings.tab_ai", descKey: "settings.tab_description_ai" },
+  { tab: "cloud-account", icon: IdCard, titleKey: "settings.tab_cloud_account", descKey: "settings.tab_description_cloud_account" },
+  { tab: "connect", icon: Network, titleKey: "settings.tab_connect", descKey: "settings.tab_description_connect" },
+  { tab: "appearance", icon: SwatchBook, titleKey: "settings.tab_appearance", descKey: "settings.tab_description_appearance" },
+  { tab: "environment", icon: KeyRound, titleKey: "settings.tab_environment", descKey: "settings.tab_description_environment" },
+  { tab: "updates", icon: PackageCheck, titleKey: "settings.tab_updates", descKey: "settings.tab_description_updates" },
+  { tab: "recovery", icon: ArchiveRestore, titleKey: "settings.tab_recovery", descKey: "settings.tab_description_recovery" },
 ];
 
 function cardTitle(card: SettingsCardDefinition) {
@@ -59,7 +59,7 @@ function cardDescription(card: SettingsCardDefinition) {
 }
 
 function SettingsCard(props: {
-  icon: typeof Sparkles;
+  icon: typeof SlidersHorizontal;
   title: string;
   desc: string;
   onClick: () => void;

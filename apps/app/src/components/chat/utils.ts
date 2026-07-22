@@ -115,6 +115,73 @@ type AssistantRenderGroup =
   | { kind: "file"; part: FileUIPart }
   | { kind: "tool"; part: ToolUIPart | DynamicToolUIPart }
 
+function stripProcessPreamble(value: string): string {
+  const processMarkers = [
+    "我先确认",
+    "我会先",
+    "我已经确认流程",
+    "我继续找",
+    "接下来我会",
+    "现在我会",
+    "现在开始执行",
+    "工作目录解析",
+    "临时目录",
+    "日志已启动",
+    "选择器初始化",
+    "初始化连接选择器",
+    "只读/初始化探测",
+    "技能文件",
+    "读取它的",
+    "I'll use",
+    "I will use",
+    "Using the selected",
+    "I'll resolve",
+    "I'm rerunning",
+    "I'm setting",
+    "I'm doing",
+    "I'm starting",
+    "I'm initializing",
+    "I'm asking",
+    "sandbox helper failed",
+    "work-directory probe",
+    "connection selector",
+    "per-run scratch",
+    "read its instructions",
+    "work directory",
+    "temporary directory",
+    "probe",
+    "selector",
+  ]
+  const markerHits = processMarkers.filter((marker) => value.includes(marker)).length
+  if (markerHits < 2) return value
+
+  const actionMarkers = [
+    "请回复",
+    "请选择",
+    "请提供",
+    "需要你提供",
+    "要继续",
+    "下一步需要",
+    "我需要你",
+    "请告诉我",
+    "I need",
+    "Reply with",
+    "Please provide",
+    "Please send",
+    "Please choose",
+    "Choose",
+  ]
+  let start = -1
+  for (const marker of actionMarkers) {
+    const index = value.lastIndexOf(marker)
+    if (index > start) start = index
+  }
+  if (start <= 0) return value
+
+  const trimmed = value.slice(start).trim()
+  return trimmed || value
+}
+
 export function getAssistantRenderGroups(
   parts: UIMessage["parts"],
   showThinking: boolean
@@ -123,17 +190,18 @@ export function getAssistantRenderGroups(
   const groups: AssistantRenderGroup[] = []
 
   const appendText = (text: string) => {
-    if (!text) {
+    const displayText = stripProcessPreamble(text)
+    if (!displayText) {
       return
     }
 
     const previous = groups.at(-1)
     if (previous?.kind === "text") {
-      previous.text += text
+      previous.text = stripProcessPreamble(`${previous.text}${text}`)
       return
     }
 
-    groups.push({ kind: "text", text })
+    groups.push({ kind: "text", text: displayText })
   }
 
   const appendReasoning = (part: UIMessage["parts"][number]) => {

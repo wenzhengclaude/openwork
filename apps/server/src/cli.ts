@@ -8,6 +8,7 @@ import { createServerLogger, startServer, syncAllWorkspacesRuntimeMcpToEngine } 
 import { ensureLocalWorkspaceFiles } from "./workspace-init.js";
 import { findManagedEngineWorkspace } from "./workspaces.js";
 import { keepOpenworkRuntimeConfigFileFresh, writeOpenworkRuntimeConfigFile } from "./openwork-runtime-config.js";
+import { syncManagedOpenCodeSkills } from "./managed-opencode-skills.js";
 import pkg from "../package.json" with { type: "json" };
 
 const args = parseCliArgs(process.argv.slice(2));
@@ -29,6 +30,11 @@ let managedOpencode: ManagedOpencodeServer | null = null;
 
 if (!config.readOnly) {
   await ensureLocalWorkspaceFiles(config.workspaces);
+  for (const workspace of config.workspaces) {
+    if (workspace.workspaceType !== "remote" && workspace.path.trim()) {
+      await syncManagedOpenCodeSkills(workspace.path);
+    }
+  }
 }
 
 if (!config.opencodeBaseUrl && process.env.OPENWORK_MANAGE_OPENCODE === "1") {
@@ -76,7 +82,7 @@ if (managedOpencode) {
 }
 
 const url = `http://${config.host}:${server.port}`;
-logger.log("info", `OpenWork server listening on ${url}`);
+logger.log("info", `Open One server listening on ${url}`);
 
 if (config.tokenSource === "generated") {
   logger.log("info", `Client token: ${config.token}`);

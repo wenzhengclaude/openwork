@@ -33,7 +33,7 @@ export const OPENWORK_MODEL_PREVIEWS: OpenWorkModelPreview[] = Object.entries(
   .filter(([, model]) => model.enabled)
   .map(([id, model]) => ({
     id,
-    title: model.displayName.replace(/^OpenWork:\s*/, ""),
+    title: model.displayName.replace(/^Open(?:Work| One):\s*/, ""),
     subtitle: "Open One hosted",
   }));
 

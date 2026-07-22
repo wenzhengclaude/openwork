@@ -489,7 +489,7 @@ export function registerCoreRoutes(options: RegisterCoreRoutesOptions): void {
           400,
           error.code,
           error.code === "reserved_env_key"
-            ? "Environment variable name is reserved for OpenWork internals"
+            ? "Environment variable name is reserved for Open One internals"
             : "Invalid environment variable name",
         );
       }

@@ -36,6 +36,12 @@ import {
   type ExtensionItem,
 } from "../extension-items";
 import {
+  builtInClaudePluginActionLabel,
+  builtInClaudePluginBundleSummary,
+  builtInClaudePluginStatus,
+  type BuiltInClaudePluginBundle,
+} from "../built-in-claude-plugin-bundles";
+import {
   openDesktopPath,
   readOpencodeConfig,
   revealDesktopItemInDir,
@@ -98,6 +104,8 @@ export type McpViewProps = {
   cloudSkills?: DenOrgSkillCard[];
   /** Cloud skill import metadata stored in this workspace. */
   importedCloudSkills?: Record<string, CloudImportedSkill>;
+  /** Built-in Claude plugin bundles surfaced as managed skill packs. */
+  builtInClaudePluginBundles?: BuiltInClaudePluginBundle[];
   /** Installed marketplace packages to render alongside runtime extensions. */
   installedPlugins?: CloudImportedPlugin[];
   /** Uninstall a skill by name. */
@@ -268,8 +276,10 @@ export function McpView(props: McpViewProps) {
   const [detailSkill, setDetailSkill] = useState<SkillItem | null>(null);
   const [detailSkillContent, setDetailSkillContent] = useState<string | null>(null);
   const [detailPlugin, setDetailPlugin] = useState<CloudImportedPlugin | null>(null);
+  const [detailBuiltInClaudePluginBundle, setDetailBuiltInClaudePluginBundle] = useState<BuiltInClaudePluginBundle | null>(null);
   const [detailOrgMcpItem, setDetailOrgMcpItem] = useState<ExtensionItem | null>(null);
   const [installingCloudSkillId, setInstallingCloudSkillId] = useState<string | null>(null);
+  const [installingBuiltInClaudePluginBundleId, setInstallingBuiltInClaudePluginBundleId] = useState<string | null>(null);
   const [openworkUiMcpCommand, setOpenworkUiMcpCommand] = useState<string[] | null>(null);
   const [openworkUiMcpEnvironment, setOpenworkUiMcpEnvironment] = useState<Record<string, string> | null>(null);
   const [computerUseMcpCommand, setComputerUseMcpCommand] = useState<string[] | null>(null);
@@ -470,6 +480,9 @@ export function McpView(props: McpViewProps) {
     (entry) => resolveStatus(entry) === "connected",
   ).length;
   const installedSkillNames = new Set((props.installedSkills ?? []).map((skill) => skill.name));
+  const installedPluginById = Object.fromEntries((props.installedPlugins ?? []).map((plugin) => [plugin.pluginId, plugin]));
+  const groupedBuiltInClaudePluginIds = new Set((props.builtInClaudePluginBundles ?? []).flatMap((bundle) => bundle.plugins.map((plugin) => plugin.id)));
+  const groupedInstalledPlugins = (props.installedPlugins ?? []).filter((plugin) => !groupedBuiltInClaudePluginIds.has(plugin.pluginId));
   const cloudSkillInstallState = (skill: DenOrgSkillCard): CloudSkillInstallState => {
     const imported = props.importedCloudSkills?.[skill.id];
     if (!imported) return "available";
@@ -485,9 +498,11 @@ export function McpView(props: McpViewProps) {
     }
     return "installed";
   };
+  const builtInClaudePluginBundleInstallState = (bundle: BuiltInClaudePluginBundle) =>
+    builtInClaudePluginStatus(bundle, installedPluginById);
   const hiddenCount = quickConnectList.filter((entry) => isOpenWorkExtensionHidden(entry)).length +
     (props.installedSkills ?? []).filter((skill) => isOpenWorkExtensionHidden(getSkillHiddenId(skill))).length +
-    (props.installedPlugins ?? []).filter((plugin) => isOpenWorkExtensionHidden(`plugin:${plugin.pluginId}`)).length;
+    groupedInstalledPlugins.filter((plugin) => isOpenWorkExtensionHidden(`plugin:${plugin.pluginId}`)).length;
   const policyHiddenBuiltInCount = props.builtInExtensionsDisabled
     ? quickConnectList.filter((entry) => isBuiltInOpenWorkExtension(entry) && !isOpenWorkExtensionHidden(entry)).length
     : 0;
@@ -564,6 +579,45 @@ export function McpView(props: McpViewProps) {
     }
   };
 
+  const installBuiltInClaudePluginBundle = async (bundle: BuiltInClaudePluginBundle) => {
+    if (!props.installClaudePlugin || installingBuiltInClaudePluginBundleId) return;
+    setInstallingBuiltInClaudePluginBundleId(bundle.id);
+    let installed = 0;
+    try {
+      for (const plugin of bundle.plugins) {
+        if (installedPluginById[plugin.id]) continue;
+        const result = await props.installClaudePlugin(plugin.url);
+        if (!result.ok) throw new Error(result.message);
+        installed += 1;
+      }
+      toast.success(installed > 0
+        ? `Installed ${bundle.name} (${installed} plugin${installed === 1 ? "" : "s"}).`
+        : `${bundle.name} is already installed.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Failed to install ${bundle.name}.`);
+    } finally {
+      setInstallingBuiltInClaudePluginBundleId(null);
+    }
+  };
+
+  const removeBuiltInClaudePluginBundle = async (bundle: BuiltInClaudePluginBundle) => {
+    if (!props.removeCloudPlugin || installingBuiltInClaudePluginBundleId) return;
+    const installedPlugins = bundle.plugins.filter((plugin) => Boolean(installedPluginById[plugin.id]));
+    if (installedPlugins.length === 0) return;
+    setInstallingBuiltInClaudePluginBundleId(bundle.id);
+    try {
+      for (const plugin of installedPlugins.slice().reverse()) {
+        await props.removeCloudPlugin(plugin.id);
+      }
+      toast.success(`Removed ${bundle.name}.`);
+      setDetailBuiltInClaudePluginBundle(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Failed to remove ${bundle.name}.`);
+    } finally {
+      setInstallingBuiltInClaudePluginBundleId(null);
+    }
+  };
+
   return (
     <section className="space-y-8 max-w-3xl w-full animate-in fade-in duration-300">
       {showHeader ? (
@@ -578,7 +632,7 @@ export function McpView(props: McpViewProps) {
 
       {props.builtInExtensionsDisabled ? (
         <div className="rounded-xl border border-amber-6 bg-amber-2 px-4 py-3 text-xs text-amber-11">
-          Built-in OpenWork extensions are disabled by your organization. Use Show hidden to review blocked built-ins.
+          Built-in Open One extensions are disabled by your organization. Use Show hidden to review blocked built-ins.
         </div>
       ) : null}
 
@@ -652,8 +706,22 @@ export function McpView(props: McpViewProps) {
             return skill.title.toLowerCase().includes(q) || (skill.description ?? "").toLowerCase().includes(q);
           })
         }
+        builtInClaudePluginBundles={
+          (props.builtInClaudePluginBundles ?? []).filter((bundle) => {
+            if (filter === "mcp") return false;
+            if (!search.trim()) return true;
+            const q = search.toLowerCase();
+            return [
+              bundle.name,
+              bundle.description,
+              bundle.sourceUrl,
+              bundle.homepageUrl,
+              ...bundle.plugins.flatMap((plugin) => [plugin.name, plugin.description, plugin.components]),
+            ].join(" ").toLowerCase().includes(q);
+          })
+        }
         installedPlugins={
-          (props.installedPlugins ?? []).filter((plugin) => {
+          groupedInstalledPlugins.filter((plugin) => {
             if (!showHidden && isOpenWorkExtensionHidden(`plugin:${plugin.pluginId}`)) return false;
             if (filter === "mcp" || filter === "skill") return false;
             if (!search.trim()) return true;
@@ -708,8 +776,12 @@ export function McpView(props: McpViewProps) {
           }
         }}
         cloudSkillInstallState={cloudSkillInstallState}
+        builtInClaudePluginBundleInstallState={builtInClaudePluginBundleInstallState}
         installingCloudSkillId={installingCloudSkillId}
+        installingBuiltInClaudePluginBundleId={installingBuiltInClaudePluginBundleId}
         onCloudSkillInstall={(skill) => void installCloudSkill(skill)}
+        onBuiltInClaudePluginBundleInstall={(bundle) => void installBuiltInClaudePluginBundle(bundle)}
+        onBuiltInClaudePluginBundleDetail={setDetailBuiltInClaudePluginBundle}
         onPluginDetail={setDetailPlugin}
         onOrgMcpDetail={setDetailOrgMcpItem}
         orgMcpDisconnectingId={props.orgMcpDisconnectingId ?? null}
@@ -919,6 +991,38 @@ export function McpView(props: McpViewProps) {
         );
       })() : null}
 
+      {detailBuiltInClaudePluginBundle ? (() => {
+        const state = builtInClaudePluginBundleInstallState(detailBuiltInClaudePluginBundle);
+        const connected = state.status === "installed";
+        const partial = state.installedCount > 0 && !connected;
+        const busy = installingBuiltInClaudePluginBundleId === detailBuiltInClaudePluginBundle.id;
+        const summary = builtInClaudePluginBundleSummary(detailBuiltInClaudePluginBundle, installedPluginById);
+        return (
+          <ExtensionDetailModal
+            open
+            onClose={() => setDetailBuiltInClaudePluginBundle(null)}
+            name={detailBuiltInClaudePluginBundle.name}
+            description={detailBuiltInClaudePluginBundle.description}
+            kind="skill"
+            typeLabel="Built-in skill pack"
+            url={detailBuiltInClaudePluginBundle.sourceUrl}
+            connected={connected}
+            connectedLabel="Installed"
+            disconnectedLabel={partial ? "Partially installed" : "Not installed"}
+            connecting={busy}
+            connectLabel={partial ? "Install missing" : "Install"}
+            connectingLabel="Installing..."
+            uninstallLabel="Remove"
+            showEnablementCard={false}
+            manifestTitle="Package contents"
+            resourceLabels={summary.resourceLabels}
+            contributionLabels={summary.contributionLabels}
+            onConnect={!connected ? () => void installBuiltInClaudePluginBundle(detailBuiltInClaudePluginBundle) : undefined}
+            onUninstall={state.installedCount > 0 ? () => void removeBuiltInClaudePluginBundle(detailBuiltInClaudePluginBundle) : undefined}
+          />
+        );
+      })() : null}
+
       {detailOrgMcpItem && isOrgMcpConnectionItem(detailOrgMcpItem) ? (() => {
         const connection = detailOrgMcpItem.orgMcpConnection;
         const canDisconnect = canDisconnectNativeProviderAccount(connection);
@@ -996,6 +1100,7 @@ function McpQuickConnectSection(props: {
   entries: McpDirectoryInfo[];
   installedSkills?: SkillItem[];
   cloudSkills?: DenOrgSkillCard[];
+  builtInClaudePluginBundles?: BuiltInClaudePluginBundle[];
   installedPlugins?: CloudImportedPlugin[];
   installedOrgMcpItems?: ExtensionItem[];
   busy: boolean;
@@ -1011,8 +1116,12 @@ function McpQuickConnectSection(props: {
   onDetail: (entry: McpDirectoryInfo) => void;
   onSkillDetail?: (skill: SkillItem) => void;
   cloudSkillInstallState: (skill: DenOrgSkillCard) => CloudSkillInstallState;
+  builtInClaudePluginBundleInstallState: (bundle: BuiltInClaudePluginBundle) => ReturnType<typeof builtInClaudePluginStatus>;
   installingCloudSkillId: string | null;
+  installingBuiltInClaudePluginBundleId: string | null;
   onCloudSkillInstall?: (skill: DenOrgSkillCard) => void;
+  onBuiltInClaudePluginBundleInstall?: (bundle: BuiltInClaudePluginBundle) => void;
+  onBuiltInClaudePluginBundleDetail?: (bundle: BuiltInClaudePluginBundle) => void;
   onPluginDetail?: (plugin: CloudImportedPlugin) => void;
   onOrgMcpDetail?: (item: ExtensionItem) => void;
   orgMcpDisconnectingId: string | null;
@@ -1084,6 +1193,36 @@ function McpQuickConnectSection(props: {
           );
         })}
 
+        {(props.builtInClaudePluginBundles ?? []).map((bundle) => {
+          const state = props.builtInClaudePluginBundleInstallState(bundle);
+          const connected = state.status === "installed";
+          const partial = state.installedCount > 0 && !connected;
+          const installing = props.installingBuiltInClaudePluginBundleId === bundle.id;
+          return (
+            <ExtensionCard
+              key={`built-in-claude-plugin:${bundle.id}`}
+              name={bundle.name}
+              description={bundle.description}
+              kind="skill"
+              url={bundle.sourceUrl}
+              connected={connected}
+              connectedLabel="Installed"
+              statusLabel={partial ? `${state.installedCount}/${bundle.plugins.length} installed` : "Built-in"}
+              statusTone={partial ? "warning" : "neutral"}
+              connecting={installing}
+              disabled={props.busy || installing || !props.onBuiltInClaudePluginBundleInstall}
+              actionLabel={installing ? "Installing..." : builtInClaudePluginActionLabel(state)}
+              onClick={() => {
+                if (connected) {
+                  props.onBuiltInClaudePluginBundleDetail?.(bundle);
+                  return;
+                }
+                props.onBuiltInClaudePluginBundleInstall?.(bundle);
+              }}
+            />
+          );
+        })}
+
         {/* Installed skills */}
         {(props.installedSkills ?? []).map((skill) => {
           const hidden = props.isSkillHidden(skill);
@@ -1150,7 +1289,7 @@ function McpQuickConnectSection(props: {
           );
         })}
 
-        {props.entries.length === 0 && (props.installedSkills ?? []).length === 0 && (props.cloudSkills ?? []).length === 0 && (props.installedPlugins ?? []).length === 0 && (props.installedOrgMcpItems ?? []).length === 0 ? (
+        {props.entries.length === 0 && (props.installedSkills ?? []).length === 0 && (props.cloudSkills ?? []).length === 0 && (props.builtInClaudePluginBundles ?? []).length === 0 && (props.installedPlugins ?? []).length === 0 && (props.installedOrgMcpItems ?? []).length === 0 ? (
           <div className="col-span-full rounded-xl border border-dashed border-dls-border px-5 py-10 text-center">
             <Unplug size={24} className="mx-auto mb-3 text-dls-secondary/30" />
             <div className="text-sm font-medium text-dls-secondary">No extensions found</div>

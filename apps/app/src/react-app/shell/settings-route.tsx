@@ -66,6 +66,7 @@ import "@/react-app/domains/settings/openwork-voice-config";
 import "@/react-app/domains/settings/google-workspace-config";
 import { useSettingsExtensionController } from "@/react-app/domains/settings/settings-extension-controller";
 import { buildExtensionItems } from "@/react-app/domains/settings/extension-items";
+import { SAP_DEV_PLUGIN_BUNDLE } from "@/react-app/domains/settings/built-in-claude-plugin-bundles";
 import { isOpenWorkExtensionEnabled, OPENWORK_EXTENSION_STATE_CHANGED, setOpenWorkExtensionEnabled } from "@/react-app/domains/settings/extension-state";
 import { PreferencesView } from "@/react-app/domains/settings/pages/preferences-view";
 import { ShellCustomizationView } from "@/react-app/domains/settings/pages/shell-view";
@@ -88,7 +89,7 @@ import { RecoveryView } from "@/react-app/domains/settings/pages/recovery-view";
 import { SkillsView } from "@/react-app/domains/settings/pages/skills-view";
 import { UpdatesView } from "@/react-app/domains/settings/pages/updates-view";
 import { useDebugViewModel } from "@/react-app/domains/settings/state/debug-view-model";
-import { useElectronUpdaterState } from "@/react-app/domains/settings/state/electron-updater-state";
+import { useElectronUpdater } from "@/react-app/domains/settings/state/electron-updater-provider";
 import { CloudSessionProvider, useCloudSession } from "@/react-app/domains/settings/cloud/cloud-session-provider";
 import { useDenSession } from "@/react-app/domains/settings/cloud/use-den-session";
 import { useControlAction, type OpenworkControlAction } from "./control/control-provider";
@@ -115,7 +116,7 @@ import {
   revealDesktopItemInDir,
 } from "@/app/lib/desktop";
 import { isDesktopProviderBlocked } from "@/app/cloud/desktop-app-restrictions";
-import { useCheckDesktopRestriction, useDesktopConfig } from "@/react-app/domains/cloud/desktop-config-provider";
+import { useCheckDesktopRestriction } from "@/react-app/domains/cloud/desktop-config-provider";
 import { useRestrictionNotice } from "@/react-app/domains/cloud/restriction-notice-provider";
 import { useCloudProviderAutoSync } from "@/react-app/domains/cloud/use-cloud-provider-auto-sync";
 import {
@@ -198,6 +199,25 @@ async function reloadEngineOrRestartDesktop(
   }
 }
 
+function reloadEngineInBackground(
+  client: Pick<OpenworkServerClient, "reloadEngine">,
+  workspaceId: string,
+  afterReload?: () => Promise<void>,
+) {
+  void (async () => {
+    await reloadEngineOrRestartDesktop(client, workspaceId);
+    await afterReload?.();
+    try {
+      window.dispatchEvent(new CustomEvent("openwork-server-settings-changed"));
+    } catch {
+      // ignore browser event dispatch failures
+    }
+  })().catch((error) => {
+    console.warn("Open One engine reload failed after company local provider save", error);
+    toast.warning("配置已保存，但引擎刷新失败。请稍后重试或重启 Open One。");
+  });
+}
+
 function isOpenWorkCloudProvider(provider: {
   providerId?: string | null;
   source?: string | null;
@@ -246,8 +266,6 @@ function reconcileSelectedWorkspaceId(
 }
 
 const SETTINGS_HIDE_TITLEBAR_KEY = "openwork.react.settings.hide-titlebar";
-const SETTINGS_UPDATE_AUTO_CHECK_KEY = "openwork.react.settings.update-auto-check";
-const SETTINGS_UPDATE_AUTO_DOWNLOAD_KEY = "openwork.react.settings.update-auto-download";
 
 export function parseSettingsPath(pathname: string): {
   tab: SettingsTab;
@@ -360,7 +378,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const platform = usePlatform();
   const checkDesktopRestriction = useCheckDesktopRestriction();
   const restrictionNotice = useRestrictionNotice();
-  const desktopConfig = useDesktopConfig();
   const reloadCoordinator = useReloadCoordinator();
   const [embeddedPath, setEmbeddedPath] = useState(props.initialPath ?? "general");
   const route = props.embedded ? parseSettingsPath(`/settings/${embeddedPath}`) : parseSettingsPath(location.pathname);
@@ -411,12 +428,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   });
   const [themeMode, setThemeModeState] = useState<ThemeMode>(getInitialThemeMode);
   const [hideTitlebar, setHideTitlebar] = useState(() => readStoredBoolean(SETTINGS_HIDE_TITLEBAR_KEY, false));
-  const [updateAutoCheck, setUpdateAutoCheck] = useState(() =>
-    readStoredBoolean(SETTINGS_UPDATE_AUTO_CHECK_KEY, true),
-  );
-  const [updateAutoDownload, setUpdateAutoDownload] = useState(() =>
-    readStoredBoolean(SETTINGS_UPDATE_AUTO_DOWNLOAD_KEY, false),
-  );
   const [configActionStatus, setConfigActionStatus] = useState<string | null>(null);
   const [revealConfigBusy, setRevealConfigBusy] = useState(false);
   const [resetConfigBusy, setResetConfigBusy] = useState(false);
@@ -772,31 +783,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       }
     },
   });
-  const onReleaseChannelChange = useCallback(
-    (next: "stable" | "alpha") => {
-      local.setPrefs((previous) => ({ ...previous, releaseChannel: next }));
-    },
-    [local],
-  );
-  const electronUpdaterState = useElectronUpdaterState({
-    releaseChannel: local.prefs.releaseChannel ?? "stable",
-    onReleaseChannelChange,
-    updateAutoCheck,
-    updateAutoDownload,
-    desktopConfig: desktopConfig.config,
-    setError: (message) => {
-      if (message) {
-        // Auto-checks can fail without any user action; alert + log to the
-        // notification center instead of a bare toast.
-        notifyAlert({
-          kind: "update",
-          title: t("notifications.updater_error"),
-          body: message,
-          dedupeKey: "updater-error",
-        });
-      }
-    },
-  });
+  const electronUpdaterState = useElectronUpdater();
 
   const workspaceSessionGroups = useMemo(
     // Settings has no per-workspace loading state; the empty set keeps the
@@ -906,7 +893,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const installOpenAiImageExtension = useCallback(async (apiKey: string) => {
     const resolvedApiKey = apiKey.trim();
     if (!openworkClient) {
-      setImageExtensionError("OpenWork server is not connected.");
+      setImageExtensionError("Open One server is not connected.");
       return;
     }
     if (!resolvedApiKey) {
@@ -920,7 +907,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     try {
       await openworkClient.upsertUserEnv([{ key: "OPENAI_API_KEY", value: resolvedApiKey }]);
       setUserEnvKeys((current) => Array.from(new Set([...current, "OPENAI_API_KEY"])));
-      setImageExtensionStatus("Saved OPENAI_API_KEY. Agents can use OpenWork extension actions for image generation.");
+      setImageExtensionStatus("Saved OPENAI_API_KEY. Agents can use Open One extension actions for image generation.");
     } catch (error) {
       setImageExtensionError(describeRouteError(error));
     } finally {
@@ -934,7 +921,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     const apiKey = input.apiKey.trim();
     const prompt = input.prompt.trim();
     if (!client || !workspaceId) {
-      setImageGenerationError("OpenWork server is not connected for this workspace.");
+      setImageGenerationError("Open One server is not connected for this workspace.");
       return;
     }
     if (!apiKey) {
@@ -998,7 +985,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   const testVoiceSession = useCallback(async () => {
     if (!openworkClient) {
-      setVoiceError("OpenWork server is not connected.");
+      setVoiceError("Open One server is not connected.");
       return;
     }
     setVoiceBusy(true);
@@ -1006,7 +993,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     setVoiceError(null);
     try {
       const session = await openworkClient.createVoiceRealtimeSession();
-      setVoiceStatus(`Realtime ready with ${session.model} (${session.tools.length} OpenWork tools).`);
+      setVoiceStatus(`Realtime ready with ${session.model} (${session.tools.length} Open One tools).`);
     } catch (error) {
       setVoiceError(describeRouteError(error));
     } finally {
@@ -1019,7 +1006,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     const workspaceId = runtimeWorkspaceId?.trim() ?? "";
     const modelId = input.modelId.trim();
     if (!client || !workspaceId) {
-      setLocalProviderError("OpenWork server is not connected for this workspace.");
+      setLocalProviderError("Open One server is not connected for this workspace.");
       return;
     }
     if (!modelId) {
@@ -1096,15 +1083,16 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         provider: buildCompanyLocalProviderConfig(input),
       },
     });
-    reloadCoordinator.markReloadRequired("config", { type: "config", name: "opencode.json", action: "updated" });
-    await reloadEngineOrRestartDesktop(openworkClient, workspaceId);
     await opencodeClient.auth.set({
       providerID: providerId,
       auth: { type: "api", key: input.apiKey.trim() },
     });
-    await providerAuthStore.refreshProviders({ dispose: true });
-    await refreshProviderListQueries(getReactQueryClient());
-    toast.success(`${COMPANY_LOCAL_PROVIDER_NAME}已更新`);
+    reloadCoordinator.markReloadRequired("config", { type: "config", name: "opencode.json", action: "updated" });
+    reloadEngineInBackground(openworkClient, workspaceId, async () => {
+      await providerAuthStore.refreshProviders();
+      await refreshProviderListQueries(getReactQueryClient());
+    });
+    toast.success(`${COMPANY_LOCAL_PROVIDER_NAME}已保存到本机`);
   }, [openworkClient, opencodeClient, providerAuthStore, reloadCoordinator, runtimeWorkspaceId, selectedWorkspace]);
 
   useEffect(() => {
@@ -1119,14 +1107,6 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   useEffect(() => {
     writeStoredBoolean(SETTINGS_HIDE_TITLEBAR_KEY, hideTitlebar);
   }, [hideTitlebar]);
-
-  useEffect(() => {
-    writeStoredBoolean(SETTINGS_UPDATE_AUTO_CHECK_KEY, updateAutoCheck);
-  }, [updateAutoCheck]);
-
-  useEffect(() => {
-    writeStoredBoolean(SETTINGS_UPDATE_AUTO_DOWNLOAD_KEY, updateAutoDownload);
-  }, [updateAutoDownload]);
 
   const { markRouteReady: markBootRouteReady } = useBootState();
   const refreshRouteState = useMemo(() => async () => {
@@ -1727,6 +1707,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     () => extensionItems.orgMcpConnectionItems.filter((item) => item.installState === "installed"),
     [extensionItems.orgMcpConnectionItems],
   );
+  const builtInClaudePluginBundles = useMemo(
+    () => [SAP_DEV_PLUGIN_BUNDLE],
+    [],
+  );
   const routeOpenworkStatus = openworkClient ? "connected" : "disconnected";
   const notFoundRouteError = !loading && routeWorkspaceId && !selectedWorkspace
     ? "Workspace was not found. Select a new workspace from the sidebar."
@@ -1833,7 +1817,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     setRenameWorkspaceBusy(true);
     try {
       if (!openworkClient) {
-        toast.error("OpenWork server is unavailable. Reconnect the server before renaming workspaces.");
+        toast.error("Open One server is unavailable. Reconnect the server before renaming workspaces.");
         return;
       }
       await openworkClient.updateWorkspaceDisplayName(renameWorkspaceId, trimmed);
@@ -1870,7 +1854,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       }
       return;
     }
-    throw new Error("OpenWork server is unavailable. Reconnect the server before exporting workspace config.");
+    throw new Error("Open One server is unavailable. Reconnect the server before exporting workspace config.");
   }, [baseUrl, token, workspaces]);
 
   const handleForgetWorkspace = useCallback(async (workspaceId: string) => {
@@ -1908,7 +1892,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           .catch(() => null);
       }
       if (!list) {
-        throw new Error("OpenWork server is unavailable. Start or reconnect the server before creating a workspace.");
+        throw new Error("Open One server is unavailable. Start or reconnect the server before creating a workspace.");
       }
       const createdId = resolveWorkspaceListSelectedId(list) || list.workspaces[list.workspaces.length - 1]?.id || "";
       if (createdId) {
@@ -1951,7 +1935,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         list = await openworkClient.createRemoteWorkspace(payload).catch(() => null);
       }
       if (!list) {
-        throw new Error("OpenWork server is unavailable. Start or reconnect the server before connecting a remote workspace.");
+        throw new Error("Open One server is unavailable. Start or reconnect the server before connecting a remote workspace.");
       }
       const createdId = resolveWorkspaceListSelectedId(list) || list.workspaces[list.workspaces.length - 1]?.id || "";
       if (createdId) {
@@ -2172,6 +2156,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 installedSkills={extensionItems.installedSkills}
                 cloudSkills={extensionsStore.cloudOrgSkills()}
                 importedCloudSkills={extensionsStore.importedCloudSkills()}
+                builtInClaudePluginBundles={builtInClaudePluginBundles}
                 installedPlugins={extensionItems.installedCloudPlugins}
                 installedOrgMcpItems={installedOrgMcpConnectionItems}
                 uninstallSkill={(name) => { void extensionsStore.uninstallSkill(name); }}
@@ -2327,16 +2312,16 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             webDeployment={platform.platform === "web"}
             appVersion={electronUpdaterState.appVersion}
             updateEnv={electronUpdaterState.updateEnv}
-            updateAutoCheck={updateAutoCheck}
-            toggleUpdateAutoCheck={() => setUpdateAutoCheck((current) => !current)}
-            updateAutoDownload={updateAutoDownload}
-            toggleUpdateAutoDownload={() => setUpdateAutoDownload((current) => !current)}
+            updateAutoCheck={electronUpdaterState.updateAutoCheck}
+            toggleUpdateAutoCheck={electronUpdaterState.toggleUpdateAutoCheck}
+            updateAutoDownload={electronUpdaterState.updateAutoDownload}
+            toggleUpdateAutoDownload={electronUpdaterState.toggleUpdateAutoDownload}
             updateStatus={electronUpdaterState.updateStatus}
             anyActiveRuns={activeReloadBlockingSessions.length > 0}
             checkForUpdates={electronUpdaterState.checkForUpdates}
             downloadUpdate={electronUpdaterState.downloadUpdate}
             installUpdateAndRestart={electronUpdaterState.installUpdateAndRestart}
-            releaseChannel={local.prefs.releaseChannel ?? "stable"}
+            releaseChannel={electronUpdaterState.releaseChannel}
             onReleaseChannelChange={electronUpdaterState.setReleaseChannel}
             alphaChannelSupported={isElectronRuntime() && isMacPlatform()}
           />

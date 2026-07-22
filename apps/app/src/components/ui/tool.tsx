@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/collapsible"
 import { getToolActivityLabel, isToolPartInFlight } from "@/lib/tool-activity"
 import { cn } from "@/lib/utils"
+import type { DiffReviewRequest } from "@/react-app/domains/session/review/diff-review"
 import {
   Bot,
   ChevronDown,
@@ -58,6 +59,8 @@ export type ToolProps = {
   toolPart: ToolPart
   defaultOpen?: boolean
   className?: string
+  diffReview?: DiffReviewRequest
+  onOpenDiffReview?: (review: DiffReviewRequest) => void
 }
 
 const formatValue = (value: unknown): string => {
@@ -116,7 +119,7 @@ function DiffLines({ diff }: { diff: string }) {
   )
 }
 
-const Tool = ({ title, toolPart, defaultOpen = false, className }: ToolProps) => {
+const Tool = ({ title, toolPart, defaultOpen = false, className, diffReview, onOpenDiffReview }: ToolProps) => {
   const { state, input } = toolPart
   const inFlight = isToolPartInFlight(toolPart)
   const isError = state === "output-error"
@@ -125,29 +128,45 @@ const Tool = ({ title, toolPart, defaultOpen = false, className }: ToolProps) =>
   const hasOutput = "output" in toolPart && toolPart.output !== undefined
   const inputDiff = getInputDiff(input)
   const Icon = toolIcon(toolPart)
+  const canOpenReview = Boolean(diffReview?.files.length && onOpenDiffReview)
 
   return (
     <Collapsible className={className} defaultOpen={defaultOpen}>
-      <CollapsibleTrigger
-        className="group text-muted-foreground hover:text-foreground flex w-full min-w-0 cursor-pointer items-center justify-start gap-2 overflow-hidden text-start text-sm transition-colors"
-      >
-        <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
-          <span className="transition-opacity group-hover:opacity-0">
-            {inFlight ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : isError ? (
-              <CircleAlert className="text-destructive size-4" />
-            ) : (
-              <Icon className="size-3.5" />
-            )}
+      <div className="flex min-w-0 items-center gap-2">
+        <CollapsibleTrigger
+          className="group text-muted-foreground hover:text-foreground flex min-w-0 flex-1 cursor-pointer items-center justify-start gap-2 overflow-hidden text-start text-sm transition-colors"
+        >
+          <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
+            <span className="transition-opacity group-hover:opacity-0">
+              {inFlight ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : isError ? (
+                <CircleAlert className="text-destructive size-4" />
+              ) : (
+                <Icon className="size-3.5" />
+              )}
+            </span>
+            <ChevronDown className="absolute size-4 opacity-0 transition-opacity group-hover:opacity-100 group-data-panel-open:rotate-180" />
           </span>
-          <ChevronDown className="absolute size-4 opacity-0 transition-opacity group-hover:opacity-100 group-data-panel-open:rotate-180" />
-        </span>
-        <span className="min-w-0 truncate">{label}</span>
-        {isError ? (
-          <span className="text-destructive shrink-0 text-xs">failed</span>
+          <span className="min-w-0 truncate">{label}</span>
+          {isError ? (
+            <span className="text-destructive shrink-0 text-xs">failed</span>
+          ) : null}
+        </CollapsibleTrigger>
+        {canOpenReview && diffReview ? (
+          <button
+            type="button"
+            className="shrink-0 rounded-full border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenDiffReview?.(diffReview)
+            }}
+          >
+            审阅
+          </button>
         ) : null}
-      </CollapsibleTrigger>
+      </div>
       <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden text-sm transition-[height] duration-150 ease-out data-starting-style:h-0 data-ending-style:h-0 [&[hidden]:not([hidden='until-found'])]:hidden">
         <div className="bg-muted mt-2 flex flex-col gap-2 rounded-lg p-2 text-xs">
           {hasInput ? (

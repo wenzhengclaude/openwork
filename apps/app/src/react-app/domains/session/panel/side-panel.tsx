@@ -3,6 +3,7 @@ import * as React from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  FilePen,
   Globe,
   Loader2,
   Plus,
@@ -23,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import { ArtifactIcon } from "../artifacts/artifact-icon";
 import { ArtifactPanel } from "../artifacts/artifact-panel";
+import { DiffReviewPanel } from "../review/diff-review-panel";
 import {
   type BrowserPanelTab,
   usePanelTabStore,
@@ -123,6 +125,8 @@ function SidePanelTab({ tab, active, onSelect, onClose }: SidePanelTabProps) {
             ) : (
               <Globe />
             )
+          ) : tab.type === "review" ? (
+            <FilePen />
           ) : (
             <ArtifactIcon type={tab.preview} />
           )}
@@ -590,6 +594,8 @@ export function SidePanel({
               onClose={onClose}
             />
           </div>
+        ) : activeTab?.type === "review" ? (
+          <DiffReviewPanel tab={activeTab} />
         ) : null}
       </div>
     </TooltipProvider>

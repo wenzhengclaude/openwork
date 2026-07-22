@@ -1,6 +1,8 @@
 "use memo";
 
 import { useSessionActivityStore } from "@/react-app/domains/session/status/session-activity-store"
+import type { DiffReviewRequest } from "@/react-app/domains/session/review/diff-review"
+import type { UIMessage } from "ai"
 import * as React from "react"
 
 interface MessageListContextValue {
@@ -16,6 +18,8 @@ interface MessageListContextValue {
   onRevertToUserMessage: (messageId: string) => void
   onForkAtMessage: (messageId: string) => void
   onEditUserMessage: (messageId: string, text: string) => void
+  onOpenDiffReview?: (review: DiffReviewRequest) => void
+  renderAfterMessage?: (message: UIMessage) => React.ReactNode
 }
 
 const MessageListContext = React.createContext<MessageListContextValue | null>(null)
@@ -30,10 +34,12 @@ interface MessageListProviderProps {
   onRevertToUserMessage: (messageId: string) => void
   onForkAtMessage: (messageId: string) => void
   onEditUserMessage: (messageId: string, text: string) => void
+  onOpenDiffReview?: (review: DiffReviewRequest) => void
   displaySuggestions: boolean
   providerConnectedCount: number
   dispatchAction: (action: DispatchAction) => void
   setPrompt: (prompt: string) => void
+  renderAfterMessage?: (message: UIMessage) => React.ReactNode
 }
 
 export interface DispatchAction {
@@ -56,6 +62,8 @@ export function MessageListProvider({
   onRevertToUserMessage,
   onForkAtMessage,
   onEditUserMessage,
+  onOpenDiffReview,
+  renderAfterMessage,
 }: MessageListProviderProps) {
   const value = React.useMemo(
     () => ({
@@ -71,6 +79,8 @@ export function MessageListProvider({
       onRevertToUserMessage,
       onForkAtMessage,
       onEditUserMessage,
+      onOpenDiffReview,
+      renderAfterMessage,
     }),
     [
       workspaceId,
@@ -85,6 +95,8 @@ export function MessageListProvider({
       onRevertToUserMessage,
       onForkAtMessage,
       onEditUserMessage,
+      onOpenDiffReview,
+      renderAfterMessage,
     ],
   )
 

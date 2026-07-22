@@ -12,7 +12,8 @@
  * runtime-DB write — unlike the previous OPENCODE_CONFIG_CONTENT env var,
  * which was frozen at spawn and reverted MCP state on each dispose.
  */
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
@@ -29,6 +30,7 @@ import {
   runtimeMcpMap,
   runtimePluginList,
   runtimeStorageDir,
+  type RuntimeOpencodeConfig,
 } from "./runtime-opencode-config-store.js";
 
 const OPENWORK_AGENT_PROMPT = `You are Open One.
@@ -86,7 +88,8 @@ export async function buildOpenworkRuntimeConfigObject(
   config?: ServerConfig,
   workspaceId?: string,
 ): Promise<Record<string, unknown>> {
-  const runtimeConfig = config && workspaceId ? await readRuntimeOpencodeConfig(config, workspaceId) : {};
+  const storedRuntimeConfig = config && workspaceId ? await readRuntimeOpencodeConfig(config, workspaceId) : {};
+  const runtimeConfig = config ? await hydrateCompanyLocalProviderAuth(config, storedRuntimeConfig) : storedRuntimeConfig;
   const disabledProviders = runtimeDisabledProviderList(runtimeConfig);
   return {
     ...runtimeConfig,
@@ -110,6 +113,114 @@ export async function buildOpenworkRuntimeConfigObject(
     ...(disabledProviders.length ? { disabled_providers: disabledProviders } : {}),
     mcp: runtimeMcpMap(runtimeConfig),
   };
+}
+
+async function hydrateCompanyLocalProviderAuth(
+  config: ServerConfig,
+  runtimeConfig: RuntimeOpencodeConfig,
+): Promise<RuntimeOpencodeConfig> {
+  if (!runtimeConfig.provider) return runtimeConfig;
+  const provider: Record<string, unknown> = {};
+  let changed = false;
+  for (const [providerId, providerValue] of Object.entries(runtimeConfig.provider)) {
+    if (!isCompanyLocalProviderId(providerId) || !isRecord(providerValue) || readProviderApiKey(providerValue)) {
+      provider[providerId] = providerValue;
+      continue;
+    }
+    const apiKey = await readOpencodeProviderApiKey(config, [providerId, "company-local"]);
+    if (!apiKey) {
+      provider[providerId] = providerValue;
+      continue;
+    }
+    provider[providerId] = providerWithApiKey(providerValue, apiKey);
+    changed = true;
+  }
+  return changed ? { ...runtimeConfig, provider } : runtimeConfig;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCompanyLocalProviderId(providerId: string): boolean {
+  const normalized = providerId.trim().toLowerCase();
+  return normalized === "company-local" || normalized.startsWith("company-local-");
+}
+
+function readStringField(value: unknown, key: string): string {
+  if (!isRecord(value)) return "";
+  const candidate = value[key];
+  return typeof candidate === "string" ? candidate.trim() : "";
+}
+
+function readFirstString(value: unknown, keys: string[]): string {
+  for (const key of keys) {
+    const candidate = readStringField(value, key);
+    if (candidate) return candidate;
+  }
+  return "";
+}
+
+function readProviderApiKey(provider: Record<string, unknown>): string {
+  const options = isRecord(provider.options) ? provider.options : {};
+  const auth = isRecord(provider.auth) ? provider.auth : {};
+  return readFirstString(options, ["apiKey", "api_key", "key"])
+    || readFirstString(auth, ["apiKey", "api_key", "key"])
+    || readFirstString(provider, ["apiKey", "api_key", "key"]);
+}
+
+function providerWithApiKey(provider: Record<string, unknown>, apiKey: string): Record<string, unknown> {
+  const options = isRecord(provider.options) ? provider.options : {};
+  return {
+    ...provider,
+    options: {
+      ...options,
+      apiKey,
+    },
+  };
+}
+
+function resolveOpencodeAuthPaths(config: ServerConfig): string[] {
+  const paths: string[] = [];
+  const addPath = (path: string) => {
+    const trimmed = path.trim();
+    if (trimmed && !paths.includes(trimmed)) paths.push(trimmed);
+  };
+  const override = process.env.OPENCODE_AUTH_FILE?.trim();
+  if (override) addPath(override);
+  const xdgDataHome = process.env.XDG_DATA_HOME?.trim();
+  if (xdgDataHome) addPath(join(xdgDataHome, "opencode", "auth.json"));
+  addPath(join(runtimeStorageDir(config), "opencode", "auth.json"));
+  if (process.platform === "win32") {
+    const appData = process.env.APPDATA?.trim() || join(homedir(), "AppData", "Roaming");
+    addPath(join(appData, "opencode", "auth.json"));
+    addPath(join(appData, "openwork", "opencode", "auth.json"));
+    addPath(join(appData, "com.differentai.openwork", "openwork-dev-data", "xdg", "data", "opencode", "auth.json"));
+    addPath(join(appData, "com.differentai.openwork.dev", "openwork-dev-data", "xdg", "data", "opencode", "auth.json"));
+  } else {
+    addPath(join(homedir(), ".local", "share", "opencode", "auth.json"));
+  }
+  return paths;
+}
+
+async function readOpencodeProviderApiKey(config: ServerConfig, providerIds: string[]): Promise<string> {
+  for (const authPath of resolveOpencodeAuthPaths(config)) {
+    try {
+      const raw = await readFile(authPath, "utf8");
+      const parsed: unknown = JSON.parse(raw);
+      if (!isRecord(parsed)) continue;
+      for (const providerId of providerIds) {
+        const entry = parsed[providerId];
+        if (!isRecord(entry)) continue;
+        if (readStringField(entry, "type") !== "api") continue;
+        const key = readStringField(entry, "key");
+        if (key) return key;
+      }
+    } catch {
+      // Try the next local OpenCode auth store candidate.
+    }
+  }
+  return "";
 }
 
 export async function buildOpenworkRuntimeConfig(config?: ServerConfig, workspaceId?: string): Promise<string> {

@@ -4,6 +4,7 @@ import { t } from "../../i18n";
 export const DEFAULT_SESSION_TITLE = "New session";
 
 const GENERATED_SESSION_TITLE_PREFIX = `${DEFAULT_SESSION_TITLE} - `;
+const INITIAL_SESSION_TITLE_MAX_CHARS = 40;
 
 export function isGeneratedSessionTitle(title: string | null | undefined) {
   const trimmed = title?.trim() ?? "";
@@ -19,4 +20,21 @@ export function getDisplaySessionTitle(
   const trimmed = title?.trim() ?? "";
   if (!trimmed || isGeneratedSessionTitle(trimmed)) return fallback ?? t("session.default_title");
   return trimmed;
+}
+
+export function shouldApplyInitialSessionTitle(title: string | null | undefined) {
+  const trimmed = title?.trim() ?? "";
+  if (!trimmed || isGeneratedSessionTitle(trimmed)) return true;
+  return trimmed === DEFAULT_SESSION_TITLE || trimmed === t("session.default_title");
+}
+
+export function deriveInitialSessionTitle(text: string) {
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .find(Boolean);
+  if (!firstLine) return null;
+  const chars = Array.from(firstLine);
+  if (chars.length <= INITIAL_SESSION_TITLE_MAX_CHARS) return firstLine;
+  return `${chars.slice(0, INITIAL_SESSION_TITLE_MAX_CHARS).join("")}...`;
 }

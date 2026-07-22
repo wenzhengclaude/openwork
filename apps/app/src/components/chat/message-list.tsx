@@ -11,7 +11,6 @@ import {
   Split,
   Undo2,
 } from "lucide-react"
-import { PaperGrainGradient } from "@openwork/ui/react"
 import {
   DynamicToolUIPart,
   isFileUIPart,
@@ -135,12 +134,14 @@ class ToolMessage extends React.Component<ToolMessageProps, { failed: boolean }>
 }
 
 const ToolMessageInner = ({ part }: ToolMessageProps) => {
+  const { onOpenDiffReview } = useMessageList()
+
   if (isBashToolPart(part)) {
     return <BashTool part={part} />
   }
 
   if (isEditToolPart(part)) {
-    return <EditTool part={part} />
+    return <EditTool part={part} onOpenDiffReview={onOpenDiffReview} />
   }
 
   if (isWriteToolPart(part)) {
@@ -164,7 +165,7 @@ const ToolMessageInner = ({ part }: ToolMessageProps) => {
   }
 
   if (isApplyPatchToolPart(part)) {
-    return <ApplyPatchTool part={part} />
+    return <ApplyPatchTool part={part} onOpenDiffReview={onOpenDiffReview} />
   }
 
   if (isSkillToolPart(part)) {
@@ -211,20 +212,29 @@ interface FileMessageProps {
   tone: "user" | "assistant"
 }
 
-// TODO: Add tone to the file message
-function FileMessage({ part }: FileMessageProps) {
+function FileMessage({ part, tone }: FileMessageProps) {
   const title = getFileTitle(part)
   const badge = getMediaBadge(part)
   const isImage = part.mediaType.startsWith("image/") && part.url
 
   if (isImage) {
     return (
-      <Image
-        src={part.url}
-        alt={title}
-        loading="lazy"
-        decoding="async"
-      />
+      <div
+        className={cn(
+          "w-full max-w-[560px]",
+          tone === "user" ? "self-end" : "self-start"
+        )}
+      >
+        <Image
+          src={part.url}
+          alt={title}
+          loading="lazy"
+          decoding="async"
+          previewMaxHeight={104}
+          containerClassName="w-full"
+          className="w-full rounded-2xl border border-border bg-muted object-contain shadow-sm"
+        />
+      </div>
     )
   }
 
@@ -422,10 +432,15 @@ function renderPlainTextWithSearchHighlights(text: string, highlightQuery: strin
   return nodes
 }
 
+function stripUserVisibleSkillDisplayRules(text: string) {
+  return text.replace(/\n?Open One selected-skill display rules:\n(?:- [^\n]*(?:\n|$))*/g, "")
+}
+
 function renderUserTextWithSkillChips(text: string, highlightQuery: string | undefined) {
-  if (!USER_SKILL_TOKEN_RE.test(text)) return renderPlainTextWithSearchHighlights(text, highlightQuery, "text")
+  const displayText = stripUserVisibleSkillDisplayRules(text)
+  if (!USER_SKILL_TOKEN_RE.test(displayText)) return renderPlainTextWithSearchHighlights(displayText, highlightQuery, "text")
   let offset = 0
-  return text.split(USER_SKILL_TOKEN_RE).map((segment) => {
+  return displayText.split(USER_SKILL_TOKEN_RE).map((segment) => {
     const key = `${offset}:${segment}`
     offset += segment.length
     const skillMatch = segment.match(/^(?:Load )?\[skill ([^\]]+)\](?: and follow its instructions\.)?$/)
@@ -454,7 +469,6 @@ const UserMessage = React.memo(
                 ))}
                 {message.parts.some((part) => part.type === "text" && part.text) ? (
                   <MessageContent
-                    layoutId={message.id}
                     className="bg-muted text-foreground max-w-[85%] rounded-3xl px-5 py-2.5 whitespace-pre-wrap sm:max-w-[75%]"
                   >
                     {renderUserTextWithSkillChips(message.parts.map((part) => (part.type === "text" ? part.text : "")).join(""), highlightQuery)}
@@ -583,18 +597,7 @@ const LoadingMessage = React.memo(({ label }: { label?: string }) => (
   <Message className="mx-auto flex w-full max-w-3xl flex-col items-start gap-2 px-2 md:px-10">
     <div className="group flex w-full flex-col gap-0">
       <div className="flex items-center gap-1.5 px-1 py-1 text-sm text-muted-foreground">
-        <div style={{ width: 20, height: 20, borderRadius: "50%", overflow: "hidden" }}>
-          <PaperGrainGradient
-            speed={12}
-            softness={0.1}
-            intensity={1}
-            noise={0.05}
-            shape="sphere"
-            colors={["#818cf8", "#fb7185", "#fbbf24", "#34d399"]}
-            colorBack="#ffffff00"
-            style={{ backgroundColor: "#818cf8", width: "100%", height: "100%", borderRadius: "50%" }}
-          />
-        </div>
+        <LoaderCircle size={16} className="shrink-0 animate-spin text-muted-foreground" />
         <span>{label ?? "Thinking…"}</span>
       </div>
     </div>
@@ -711,7 +714,7 @@ function MessageGroup({
   messages,
   isStreaming,
 }: AssistantMessageGroupProps) {
-  const { onRevertToUserMessage, onForkAtMessage } = useMessageList()
+  const { onRevertToUserMessage, onForkAtMessage, renderAfterMessage } = useMessageList()
   const lastItem = items[items.length - 1]
   // Branch/revert must target a real server-side message id. Synthetic
   // client-side messages (e.g. session errors) don't exist on the server and
@@ -761,6 +764,7 @@ function MessageGroup({
           isLastStep={groupIndex === items.length - 1}
         />
         <MessageArtifacts message={item.message} />
+        {renderAfterMessage?.(item.message)}
       </div>
     )
   }
@@ -821,6 +825,7 @@ export function MessageList({ messages, status, retryStatus }: MessageListProps)
   const isStreaming = status === "streaming" || status === "retrying"
   const items = React.useMemo(() => groupMessages(messages, status), [messages, status]);
   const error = useSessionErrorMessage();
+  const { renderAfterMessage } = useMessageList()
   const hasSessionErrorMessage = React.useMemo(() => messages.some(isSessionErrorMessage), [messages])
   const liveActionLabel = isStreaming
     ? getActiveToolLabel(collectToolParts(messages))
@@ -855,6 +860,7 @@ export function MessageList({ messages, status, retryStatus }: MessageListProps)
               isLastStep={isLastStep}
             />
             <MessageArtifacts message={item.message} />
+            {renderAfterMessage?.(item.message)}
           </div>
         )
       })}

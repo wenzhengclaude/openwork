@@ -19,8 +19,10 @@ import { Input } from "@/components/ui/input";
 import type { OpenAiCompatibleProviderModelsResult } from "@/app/lib/openwork-server";
 import {
   COMPANY_LOCAL_PROVIDER_NAME,
+  companyLocalReasoningEfforts,
   companyLocalModelSupportsImageInput,
   companyLocalModelSupportsReasoning,
+  setCompanyLocalModelReasoningEfforts,
   setCompanyLocalModelImageInput,
   type CompanyLocalProviderInstallInput,
   type CompanyLocalProviderModel,
@@ -170,6 +172,7 @@ export function CompanyLocalProviderDialog(props: CompanyLocalProviderDialogProp
               <div className="max-h-64 overflow-y-auto py-1">
                 {models.map((model) => {
                   const supportsImageInput = companyLocalModelSupportsImageInput(model);
+                  const reasoningEfforts = companyLocalReasoningEfforts(model);
                   return (
                     <div key={model.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/40">
                       <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
@@ -184,7 +187,8 @@ export function CompanyLocalProviderDialog(props: CompanyLocalProviderDialogProp
                         />
                         <span className="min-w-0 flex-1 truncate">{model.name}</span>
                         <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                          {companyLocalModelSupportsReasoning(model) ? <span>{"\u63a8\u7406"}</span> : null}
+                          {reasoningEfforts.length ? <span>{"\u601d\u8003\u5f3a\u5ea6"}</span> : null}
+                          {!reasoningEfforts.length && companyLocalModelSupportsReasoning(model) ? <span>{"\u63a8\u7406"}</span> : null}
                           {formatTokenLimit(model.contextWindow) ? <span>{formatTokenLimit(model.contextWindow)} {"\u4e0a\u4e0b\u6587"}</span> : null}
                           {model.name !== model.id ? <span className="hidden font-mono lg:inline">{model.id}</span> : null}
                         </span>
@@ -201,6 +205,18 @@ export function CompanyLocalProviderDialog(props: CompanyLocalProviderDialogProp
                         />
                         <ImageIcon className="size-3" />
                         {"\u56fe\u7247\u8f93\u5165"}
+                      </label>
+                      <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-muted-foreground">
+                        <Checkbox
+                          checked={reasoningEfforts.length > 0}
+                          onCheckedChange={(checked) => {
+                            setModels((current) => current.map((item) => item.id === model.id
+                              ? setCompanyLocalModelReasoningEfforts(item, checked === true)
+                              : item));
+                          }}
+                          disabled={busy}
+                        />
+                        {"\u601d\u8003\u5f3a\u5ea6"}
                       </label>
                     </div>
                   );

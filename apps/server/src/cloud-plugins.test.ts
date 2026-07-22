@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installCloudPlugin, readInstalledCloudPlugins, removeCloudPlugin } from "./cloud-plugins.js";
-import { readRuntimeOpencodeConfig } from "./runtime-opencode-config-store.js";
+import { closeCloudPluginStoresForTests, installCloudPlugin, readInstalledCloudPlugins, removeCloudPlugin } from "./cloud-plugins.js";
+import { closeRuntimeOpencodeConfigStoresForTests, readRuntimeOpencodeConfig } from "./runtime-opencode-config-store.js";
 import type { ServerConfig } from "./types.js";
 
 const WORKSPACE_ID = "ws_cloud_plugin_test";
@@ -30,14 +30,18 @@ function serverConfig(root: string): ServerConfig {
 
 async function withWorkspace(fn: (input: { root: string; config: ServerConfig }) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), "openwork-cloud-plugin-"));
+  const runtimeDb = join(tmpdir(), `openwork-cloud-plugin-runtime-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`);
   const previousDb = process.env.OPENWORK_RUNTIME_DB;
-  process.env.OPENWORK_RUNTIME_DB = join(root, "runtime.sqlite");
+  process.env.OPENWORK_RUNTIME_DB = runtimeDb;
   try {
     await fn({ root, config: serverConfig(root) });
   } finally {
     if (previousDb === undefined) delete process.env.OPENWORK_RUNTIME_DB;
     else process.env.OPENWORK_RUNTIME_DB = previousDb;
-    await rm(root, { recursive: true, force: true });
+    await closeCloudPluginStoresForTests();
+    await closeRuntimeOpencodeConfigStoresForTests();
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(runtimeDb, { force: true }).catch(() => undefined);
   }
 }
 
@@ -109,8 +113,10 @@ describe("cloud plugin installs", () => {
       expect(installed.plugins.plugin_1?.name).toBe("Creative Brief Plugin");
       expect(installed.marketplaces.marketplace_1?.pluginIds).toEqual(["plugin_1"]);
 
-      const skillPath = join(root, ".opencode", "skills", "creative-brief-plugin", "brief-builder", "SKILL.md");
+      const skillPath = join(root, ".opencode", "plugins", "creative-brief-plugin", "skills", "brief-builder", "SKILL.md");
+      const materializedSkillPath = join(root, ".opencode", "skills", "creative-brief-plugin", "brief-builder", "SKILL.md");
       expect(await readFile(skillPath, "utf8")).toContain("OWP_BRIEF_TEST_TOKEN");
+      expect(await readFile(materializedSkillPath, "utf8")).toContain("OWP_BRIEF_TEST_TOKEN");
       expect((await readRuntimeOpencodeConfig(config, WORKSPACE_ID)).mcp?.brief).toMatchObject({
         type: "remote",
         url: "https://example.com/mcp",
@@ -120,6 +126,50 @@ describe("cloud plugin installs", () => {
       expect((await readInstalledCloudPlugins(config, WORKSPACE_ID)).plugins.plugin_1).toBeUndefined();
       expect((await readRuntimeOpencodeConfig(config, WORKSPACE_ID)).mcp?.brief).toBeUndefined();
       await expectMissing(skillPath);
+      await expectMissing(materializedSkillPath);
+    });
+  });
+
+  test("does not overwrite an existing native OpenCode skill when materializing plugin skills", async () => {
+    await withWorkspace(async ({ root, config }) => {
+      const nativeSkillPath = join(root, ".opencode", "skills", "brief-builder", "SKILL.md");
+      await mkdir(join(root, ".opencode", "skills", "brief-builder"), { recursive: true });
+      await writeFile(nativeSkillPath, "---\nname: brief-builder\ndescription: User owned\n---\nuser content\n", "utf8");
+
+      const result = await installCloudPlugin({
+        serverConfig: config,
+        workspaceId: WORKSPACE_ID,
+        workspaceRoot: root,
+        marketplaceId: null,
+        resolved: {
+          plugin: {
+            id: "plugin_conflict",
+            name: "Creative Brief Plugin",
+            description: "Brief writing workflow",
+            updatedAt: null,
+          },
+          memberships: [{
+            configObjectId: "config_skill_conflict",
+            configObject: {
+              id: "config_skill_conflict",
+              objectType: "skill",
+              title: "Brief Builder",
+              description: "Use for creative briefs",
+              currentRelativePath: null,
+              status: "active",
+              updatedAt: null,
+              latestVersion: {
+                id: "version_skill_conflict",
+                rawSourceText: "plugin content",
+                normalizedPayloadJson: null,
+              },
+            },
+          }],
+        },
+      });
+
+      expect(result.warnings.some((warning) => warning.includes(".opencode/skills/brief-builder/SKILL.md"))).toBe(true);
+      expect(await readFile(nativeSkillPath, "utf8")).toContain("user content");
     });
   });
 

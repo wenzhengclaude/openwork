@@ -178,6 +178,8 @@ export const PENDING_SOCIAL_SIGNUP_STORAGE_KEY = "openwork:web:pending-social-si
 export const AUTH_TOKEN_STORAGE_KEY = "openwork:web:auth-token";
 export const ONBOARDING_INTENT_STORAGE_KEY = "openwork:web:onboarding-intent";
 export const PENDING_AUTH_INTENT_STORAGE_KEY = "openwork:web:pending-auth-intent";
+export const PENDING_DESKTOP_AUTH_STORAGE_KEY = "openone:web:pending-desktop-auth";
+export const PENDING_DESKTOP_AUTH_SCHEME_STORAGE_KEY = "openone:web:pending-desktop-auth-scheme";
 export const WORKER_STATUS_POLL_MS = DEN_WORKER_POLL_INTERVAL_MS;
 export const DEFAULT_AUTH_NAME = "Open One User";
 export const DEFAULT_WORKER_NAME = "My Worker";
@@ -249,6 +251,11 @@ export function normalizeAuthIntentParam(value: string | null | undefined): Auth
   return value === "models" ? value : null;
 }
 
+export function normalizeDesktopSchemeParam(value: string | null | undefined): string | null {
+  const scheme = value?.trim() ?? "";
+  return /^[a-z][a-z0-9+.-]*$/i.test(scheme) ? scheme : null;
+}
+
 export function getSocialProviderLabel(provider: SocialAuthProvider): string {
   return provider === "github" ? "GitHub" : "Google";
 }
@@ -280,11 +287,23 @@ export function getSocialCallbackUrl(authCallbackBaseUrl = ""): string {
     const callbackUrl = new URL("/", origin);
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      for (const key of ["mode", "desktopAuth", "desktopScheme", "invite", "intent"]) {
+      for (const key of ["mode", "invite", "intent"]) {
         const value = params.get(key)?.trim() ?? "";
         if (value) {
           callbackUrl.searchParams.set(key, value);
         }
+      }
+
+      const desktopAuth = params.get("desktopAuth")?.trim() || window.sessionStorage.getItem(PENDING_DESKTOP_AUTH_STORAGE_KEY)?.trim() || "";
+      if (desktopAuth === "1") {
+        callbackUrl.searchParams.set("desktopAuth", "1");
+      }
+
+      const desktopScheme =
+        normalizeDesktopSchemeParam(params.get("desktopScheme")) ??
+        normalizeDesktopSchemeParam(window.sessionStorage.getItem(PENDING_DESKTOP_AUTH_SCHEME_STORAGE_KEY));
+      if (desktopScheme) {
+        callbackUrl.searchParams.set("desktopScheme", desktopScheme);
       }
     }
     return callbackUrl.toString();
@@ -898,7 +917,7 @@ export function buildOpenworkDeepLink(
     params.set("workerName", workerName);
   }
 
-  return `openwork://connect-remote?${params.toString()}`;
+  return `openone://connect-remote?${params.toString()}`;
 }
 
 export function buildOpenworkAppConnectUrl(

@@ -2,6 +2,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir, platform } from "node:os";
 import { z } from "zod";
+import {
+  OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION,
+  resolveOpenWorkExtensionDiscoveryInstruction,
+} from "./openwork-extensions-preview-instructions.js";
 
 type OpenCodeContext = {
   agent?: string;
@@ -34,7 +38,7 @@ const uiExecuteArgsSchema = z.object({
 });
 
 const browserOpenUrlArgsSchema = z.object({
-  url: z.string().describe("The website URL to open in the OpenWork built-in browser."),
+  url: z.string().describe("The website URL to open in the Open One built-in browser."),
   provider: z.enum(["auto", "builtin", "external"]).optional().describe("Browser provider. Use builtin or auto; external is reserved for future support."),
 });
 
@@ -43,23 +47,23 @@ const browserSetProxyArgsSchema = z.object({
 });
 
 const sessionSearchArgsSchema = z.object({
-  query: z.string().trim().min(1).describe("Text to search for across OpenWork session titles and message transcripts."),
-  workspaceId: z.string().trim().optional().describe("Optional OpenWork workspace id/name to limit the search."),
+  query: z.string().trim().min(1).describe("Text to search for across Open One session titles and message transcripts."),
+  workspaceId: z.string().trim().optional().describe("Optional Open One workspace id/name to limit the search."),
   limit: z.number().int().positive().max(20).optional().describe("Maximum matching sessions to return. Defaults to 10, max 20."),
   scanLimit: z.number().int().positive().max(500).optional().describe("Maximum newest sessions to scan across matching workspaces. Defaults to 100, max 500."),
   messageLimit: z.number().int().positive().max(1000).optional().describe("Maximum recent messages to load per scanned session. Defaults to 400, max 1000."),
 });
 
 const sessionReadArgsSchema = z.object({
-  sessionId: z.string().trim().min(1).describe("OpenWork/OpenCode session ID returned by openwork_session_search."),
-  workspaceId: z.string().trim().optional().describe("Optional OpenWork workspace id/name. Omit to resolve the session across all workspaces."),
+  sessionId: z.string().trim().min(1).describe("Open One/OpenCode session ID returned by openwork_session_search."),
+  workspaceId: z.string().trim().optional().describe("Optional Open One workspace id/name. Omit to resolve the session across all workspaces."),
   count: z.number().int().positive().max(100).optional().describe("Number of recent transcript messages to return. Defaults to 30, max 100."),
 });
 
 const extensionsExportArgsSchema = z.object({
   skills: z.array(z.string().trim().min(1)).optional().describe("Names of installed skills to export, as shown in Settings > Skills or .opencode/skills/**."),
-  mcps: z.array(z.string().trim().min(1)).optional().describe("Names of installed MCP servers to export, including OpenWork-managed runtime MCPs."),
-  workspaceId: z.string().trim().optional().describe("Optional OpenWork workspace id/name. Defaults to the workspace containing the current directory."),
+  mcps: z.array(z.string().trim().min(1)).optional().describe("Names of installed MCP servers to export, including Open One-managed runtime MCPs."),
+  workspaceId: z.string().trim().optional().describe("Optional Open One workspace id/name. Defaults to the workspace containing the current directory."),
 });
 
 const workspaceSchema = z.object({
@@ -112,98 +116,27 @@ const sessionMessagesEnvelopeSchema = z.object({
   items: z.array(sessionMessageSchema),
 }).passthrough();
 
-const connectStateResponseSchema = z.object({
-  ok: z.literal(true),
-  schemaVersion: z.number(),
-  connectEnabled: z.boolean(),
-  cloudMcpPresent: z.boolean(),
-  googleWorkspace: z.object({
-    legacyConfigured: z.boolean(),
-  }).passthrough(),
-}).passthrough();
-
-export type OpenWorkExtensionConnectState = {
-  connectEnabled: boolean;
-  cloudMcpPresent: boolean;
-  googleWorkspace: {
-    legacyConfigured: boolean;
-  };
-};
-
-export const OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION =
-  "If the user asks for something you cannot do with obvious built-in tools, check OpenWork extensions before saying the capability is unavailable. Use openwork_extension_list_actions to inspect available extension actions, then call the matching action with openwork_extension_call.";
-
-export const OPENWORK_CLOUD_CONNECTION_INSTRUCTION =
-  "The OpenWork Cloud connection is active. For email (Gmail), calendar, Google Drive, and org-connected services such as Notion, Linear, Slack, etc., FIRST call openwork-cloud_search_capabilities with 2-4 keyword variants, then call openwork-cloud_execute_capability with an exact returned name. Do not claim these are unavailable without searching. OpenWork extensions (openwork_extension_list_actions / openwork_extension_call) remain available for other local actions such as image generation, but do NOT use them for Google Workspace, and never direct the user to Settings > Extensions for Google Workspace; use Settings > Connect. A successful search proves OpenWork Cloud itself is authorized, so never tell the user to reconnect OpenWork Cloud because a downstream connector failed. If a result has kind connection_status, name connectionStatus.connectionName and relay connectionStatus.action exactly: use Your Connections for the member, the organization Connections dashboard for an org admin, or the provider admin console for a provider-side failure. After the requested human fixes that connector, search again in the same task. Do not try browser_* or openwork_ui_* workarounds or repeat the same call unchanged; results are live, not cached, so unchanged retries return the same error.";
-
-export const OPENWORK_CONNECT_GOOGLE_WORKSPACE_DISCONNECTED_INSTRUCTION =
-  `${OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION} Google Workspace is not connected on this device; if the user asks for email, calendar, or Google Drive, tell them to connect their account in Settings > Connect (never Settings > Extensions).`;
-
-const CONNECT_STATE_CACHE_MS = 15_000;
-
-type OpenWorkFetch = (url: string, init?: RequestInit) => Promise<Response>;
-type Clock = () => number;
-type CachedOpenWorkExtensionDiscoveryInstruction = {
-  at: number;
-  instruction: string;
-};
-
-let cachedOpenWorkExtensionDiscoveryInstruction: CachedOpenWorkExtensionDiscoveryInstruction | null = null;
-
-export function composeOpenWorkExtensionDiscoveryInstruction(state: OpenWorkExtensionConnectState | null): string {
-  if (!state || !state.connectEnabled || state.googleWorkspace.legacyConfigured) {
-    return OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION;
-  }
-  return state.cloudMcpPresent
-    ? OPENWORK_CLOUD_CONNECTION_INSTRUCTION
-    : OPENWORK_CONNECT_GOOGLE_WORKSPACE_DISCONNECTED_INSTRUCTION;
-}
-
-export function resetOpenWorkExtensionDiscoveryInstructionCacheForTests(): void {
-  cachedOpenWorkExtensionDiscoveryInstruction = null;
-}
-
-export async function resolveOpenWorkExtensionDiscoveryInstruction(fetcher: OpenWorkFetch = fetch, now: Clock = Date.now): Promise<string> {
-  const currentTime = now();
-  if (
-    cachedOpenWorkExtensionDiscoveryInstruction &&
-    currentTime - cachedOpenWorkExtensionDiscoveryInstruction.at < CONNECT_STATE_CACHE_MS
-  ) {
-    return cachedOpenWorkExtensionDiscoveryInstruction.instruction;
-  }
-
-  let instruction = OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION;
-  try {
-    instruction = composeOpenWorkExtensionDiscoveryInstruction(await fetchOpenWorkConnectState(fetcher));
-  } catch {
-    instruction = OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION;
-  }
-
-  cachedOpenWorkExtensionDiscoveryInstruction = { at: currentTime, instruction };
-  return instruction;
-}
-
 const OPENWORK_UI_CONTROL_INSTRUCTION =
-  `IMPORTANT: You are running inside the OpenWork desktop app. When the user asks you to open settings, navigate the app, add providers, or control the OpenWork UI in any way, ALWAYS use the openwork_ui_* tools — NOT the browser_* tools. The browser tools are for external websites only. The openwork_ui_* tools control the app directly and are instant (one tool call).
+  `IMPORTANT: You are running inside the Open One desktop app. When the user asks you to open settings, navigate the app, add providers, or control the Open One UI in any way, ALWAYS use the openwork_ui_* tools — NOT the browser_* tools. The browser tools are for external websites only. The openwork_ui_* tools control the app directly and are instant (one tool call).
 
 To open settings: openwork_ui_execute_action with actionId "settings.panel.open" and args {panel:"general"} (or "ai", "extensions", "permissions", "skills", "appearance", etc.)
 To add a provider: openwork_ui_execute_action with actionId "settings.provider.add" and optional args {providerId:"anthropic"}
 To see what the user sees: openwork_ui_snapshot
 To list all available actions: openwork_ui_list_actions
-To ask what OpenWork can do: openwork_ui_execute_action with actionId "help.capabilities"`;
+To ask what Open One can do: openwork_ui_execute_action with actionId "help.capabilities"`;
 
 const OPENWORK_SESSION_MEMORY_INSTRUCTION =
   `## Cross-session memory
-When the user asks what they said, what happened, or what was decided in another OpenWork chat/session, treat it as a session-history lookup, not hidden model memory.
+When the user asks what they said, what happened, or what was decided in another Open One chat/session, treat it as a session-history lookup, not hidden model memory.
 Use openwork_session_search first to search session titles and message transcripts across workspaces. If there is one clear match, use openwork_session_read with the returned sessionId/workspaceId to retrieve transcript context without navigating the UI.
 Answer only from the returned search/read results. If multiple sessions match, ask a short clarifying question. If the returned transcript is limited or missing the older context needed, say so instead of guessing.`;
 
 const OPENWORK_BROWSER_INSTRUCTION =
-  `Do NOT use browser_navigate, browser_click, or browser_snapshot to interact with the OpenWork app itself. Those are for browsing external websites.
+  `Do NOT use browser_navigate, browser_click, or browser_snapshot to interact with the Open One app itself. Those are for browsing external websites.
 
 ## Built-in Browser (external websites)
-For web browsing tasks, ALWAYS start with openwork_browser_open_url. It creates/selects a built-in OpenWork browser tab and returns browser_url plus target_id. Use that exact browser_url and target_id for every later browser_snapshot, browser_click, browser_fill, browser_eval, and browser_screenshot call.
-Do not call browser_navigate without a target_id returned by openwork_browser_open_url. Do not use browser_* tools on the OpenWork app target (avoid targets with title "OpenWork" or URLs containing ":5173/#/").`;
+For web browsing tasks, ALWAYS start with openwork_browser_open_url. It creates/selects a built-in Open One browser tab and returns browser_url plus target_id. Use that exact browser_url and target_id for every later browser_snapshot, browser_click, browser_fill, browser_eval, and browser_screenshot call.
+Do not call browser_navigate without a target_id returned by openwork_browser_open_url. Do not use browser_* tools on the Open One app target (avoid targets with title "Open One" or URLs containing ":5173/#/").`;
 
 // ── UI control bridge discovery ──
 
@@ -245,7 +178,7 @@ function userAppDataDir(): string {
 
 // The agent-facing UI-control surface (system steering + openwork_ui_* tools)
 // is opt-in: it noises every session's prompt/tool list, and the supported way
-// to grant agents UI control is the hidden "OpenWork UI Control" MCP in
+// to grant agents UI control is the hidden "Open One UI Control" MCP in
 // Settings -> Extensions. Set OPENWORK_UI_CONTROL_TOOLS=1 to re-enable the
 // built-in preview surface (used by internal tooling).
 function uiControlToolsEnabled(): boolean {
@@ -281,7 +214,7 @@ async function discoverUiBridge(): Promise<UiBridge | null> {
 
 async function uiBridgeRequest(path: string, options: { method?: string; body?: unknown } = {}): Promise<unknown> {
   const bridge = await discoverUiBridge();
-  if (!bridge) return { ok: false, error: "OpenWork UI bridge not available. The desktop app may not be running." };
+  if (!bridge) return { ok: false, error: "Open One UI bridge not available. The desktop app may not be running." };
   try {
     const response = await fetch(`${bridge.baseUrl}${path}`, {
       method: options.method || "GET",
@@ -307,25 +240,8 @@ async function serverGet(path: string): Promise<unknown> {
     headers: { Authorization: `Bearer ${token}` },
   });
   const payload = await parseResponse(response);
-  if (!response.ok) throw new Error(errorMessage(payload, "OpenWork server request failed"));
+  if (!response.ok) throw new Error(errorMessage(payload, "Open One server request failed"));
   return payload;
-}
-
-async function fetchOpenWorkConnectState(fetcher: OpenWorkFetch): Promise<OpenWorkExtensionConnectState> {
-  const { url, token } = requireOpenWorkServer();
-  const response = await fetcher(`${url}/experimental/connect/state`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const payload = await parseResponse(response);
-  if (!response.ok) throw new Error(errorMessage(payload, "OpenWork connect state request failed"));
-  const parsed = connectStateResponseSchema.parse(payload);
-  return {
-    connectEnabled: parsed.connectEnabled,
-    cloudMcpPresent: parsed.cloudMcpPresent,
-    googleWorkspace: {
-      legacyConfigured: parsed.googleWorkspace.legacyConfigured,
-    },
-  };
 }
 
 function collapseWhitespace(value: string): string {
@@ -482,7 +398,7 @@ async function searchOpenWorkSessions(rawArgs: unknown): Promise<object> {
   const queryLower = args.query.trim().toLowerCase();
   const workspaces = filterWorkspaces(await listOpenWorkWorkspaces(), args.workspaceId);
   if (!workspaces.length) {
-    return { ok: false, error: args.workspaceId ? `No workspace matched ${args.workspaceId}` : "No OpenWork workspaces are available" };
+    return { ok: false, error: args.workspaceId ? `No workspace matched ${args.workspaceId}` : "No Open One workspaces are available" };
   }
 
   const sessions: Array<{ workspace: OpenWorkWorkspace; session: SessionInfo }> = [];
@@ -537,7 +453,7 @@ async function readOpenWorkSession(rawArgs: unknown): Promise<object> {
   const count = args.count ?? 30;
   const workspaces = filterWorkspaces(await listOpenWorkWorkspaces(), args.workspaceId);
   if (!workspaces.length) {
-    return { ok: false, error: args.workspaceId ? `No workspace matched ${args.workspaceId}` : "No OpenWork workspaces are available" };
+    return { ok: false, error: args.workspaceId ? `No workspace matched ${args.workspaceId}` : "No Open One workspaces are available" };
   }
 
   for (const workspace of workspaces) {
@@ -568,7 +484,7 @@ async function readOpenWorkSession(rawArgs: unknown): Promise<object> {
     }
   }
 
-  return { ok: false, error: `Session ${args.sessionId} was not found in matching OpenWork workspaces` };
+  return { ok: false, error: `Session ${args.sessionId} was not found in matching Open One workspaces` };
 }
 
 function serverUrl(): string {
@@ -583,7 +499,7 @@ function requireOpenWorkServer(): { url: string; token: string } {
   const url = serverUrl();
   const token = serverToken();
   if (!url || !token) {
-    throw new Error("OpenWork extension tools are only available when OpenCode is launched by OpenWork.");
+    throw new Error("Open One extension tools are only available when OpenCode is launched by Open One.");
   }
   return { url, token };
 }
@@ -626,7 +542,7 @@ function normalizeDirPath(path: string): string {
 
 async function resolveContextWorkspace(workspaceId: string | undefined, context: OpenCodeContext): Promise<OpenWorkWorkspace> {
   const workspaces = await listOpenWorkWorkspaces();
-  if (!workspaces.length) throw new Error("No OpenWork workspaces are available");
+  if (!workspaces.length) throw new Error("No Open One workspaces are available");
   if (workspaceId) {
     const match = filterWorkspaces(workspaces, workspaceId).at(0);
     if (!match) throw new Error(`No workspace matched ${workspaceId}`);
@@ -648,7 +564,7 @@ async function resolveContextWorkspace(workspaceId: string | undefined, context:
   }
   const only = workspaces.at(0);
   if (workspaces.length === 1 && only) return only;
-  throw new Error(`Multiple OpenWork workspaces match; pass workspaceId. Available: ${workspaces.map((workspace) => workspaceLabel(workspace)).join(", ")}`);
+  throw new Error(`Multiple Open One workspaces match; pass workspaceId. Available: ${workspaces.map((workspace) => workspaceLabel(workspace)).join(", ")}`);
 }
 
 async function exportOpenWorkExtensions(rawArgs: unknown, context: OpenCodeContext): Promise<object> {
@@ -679,7 +595,7 @@ async function postJson(path: string, body: ExtensionActionPayload | Record<stri
   });
   const payload = await parseResponse(response);
   if (!response.ok) {
-    throw new Error(errorMessage(payload, "OpenWork extension call failed"));
+    throw new Error(errorMessage(payload, "Open One extension call failed"));
   }
   return payload;
 }
@@ -705,7 +621,7 @@ export const OpenWorkExtensionsPreview = async () => {
   },
   tool: {
     openwork_extension_list_actions: {
-      description: `List extension actions currently exposed by OpenWork. ${OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION}`,
+      description: `List extension actions currently exposed by Open One. ${OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION}`,
       args: listActionsArgsSchema.shape,
       async execute(rawArgs: unknown, context: OpenCodeContext) {
         const args = listActionsArgsSchema.parse(rawArgs);
@@ -715,12 +631,12 @@ export const OpenWorkExtensionsPreview = async () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const payload = await parseResponse(response);
-        if (!response.ok) throw new Error(errorMessage(payload, "OpenWork extension action listing failed"));
+        if (!response.ok) throw new Error(errorMessage(payload, "Open One extension action listing failed"));
         return JSON.stringify(addContext(payload, context), null, 2);
       },
     },
     openwork_extension_call: {
-      description: `Call an OpenWork extension action. Use openwork_extension_list_actions first to inspect available actions and schemas. ${OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION}`,
+      description: `Call an Open One extension action. Use openwork_extension_list_actions first to inspect available actions and schemas. ${OPENWORK_EXTENSION_DISCOVERY_INSTRUCTION}`,
       args: callArgsSchema.shape,
       async execute(rawArgs: unknown, context: OpenCodeContext) {
         const args = callArgsSchema.parse(rawArgs);
@@ -735,7 +651,7 @@ export const OpenWorkExtensionsPreview = async () => {
     },
     ...(uiControlEnabled ? {
     openwork_ui_snapshot: {
-      description: "Get a snapshot of the current OpenWork UI state: active route, narration, visible actions, and status. Use this to understand what the user sees before taking action.",
+      description: "Get a snapshot of the current Open One UI state: active route, narration, visible actions, and status. Use this to understand what the user sees before taking action.",
       args: {},
       async execute() {
         const result = await uiBridgeRequest("/snapshot");
@@ -743,7 +659,7 @@ export const OpenWorkExtensionsPreview = async () => {
       },
     },
     openwork_ui_list_actions: {
-      description: `List all UI control actions currently available in OpenWork. Each action has an id you can pass to openwork_ui_execute_action. ${OPENWORK_UI_CONTROL_INSTRUCTION}`,
+      description: `List all UI control actions currently available in Open One. Each action has an id you can pass to openwork_ui_execute_action. ${OPENWORK_UI_CONTROL_INSTRUCTION}`,
       args: {},
       async execute() {
         const result = await uiBridgeRequest("/actions");
@@ -751,7 +667,7 @@ export const OpenWorkExtensionsPreview = async () => {
       },
     },
     openwork_ui_execute_action: {
-      description: `Execute an OpenWork UI action by its id. Use openwork_ui_list_actions first to see available actions. ${OPENWORK_UI_CONTROL_INSTRUCTION}`,
+      description: `Execute an Open One UI action by its id. Use openwork_ui_list_actions first to see available actions. ${OPENWORK_UI_CONTROL_INSTRUCTION}`,
       args: uiExecuteArgsSchema.shape,
       async execute(rawArgs: unknown) {
         const { actionId, args } = uiExecuteArgsSchema.parse(rawArgs);
@@ -764,7 +680,7 @@ export const OpenWorkExtensionsPreview = async () => {
     },
     } : {}),
     openwork_session_search: {
-      description: "Search OpenWork past chat sessions by title and full message transcript text without navigating the UI. Use this when the user refers to another/past chat or asks what was said, decided, or done previously.",
+      description: "Search Open One past chat sessions by title and full message transcript text without navigating the UI. Use this when the user refers to another/past chat or asks what was said, decided, or done previously.",
       args: sessionSearchArgsSchema.shape,
       async execute(rawArgs: unknown) {
         const result = await searchOpenWorkSessions(rawArgs);
@@ -772,7 +688,7 @@ export const OpenWorkExtensionsPreview = async () => {
       },
     },
     openwork_session_read: {
-      description: "Read recent transcript messages from a specific OpenWork session without opening it. Use sessionId/workspaceId from openwork_session_search, then answer only from the returned transcript.",
+      description: "Read recent transcript messages from a specific Open One session without opening it. Use sessionId/workspaceId from openwork_session_search, then answer only from the returned transcript.",
       args: sessionReadArgsSchema.shape,
       async execute(rawArgs: unknown) {
         const result = await readOpenWorkSession(rawArgs);
@@ -780,7 +696,7 @@ export const OpenWorkExtensionsPreview = async () => {
       },
     },
     openwork_extensions_export: {
-      description: "Export portable definitions of installed skills and MCP servers from OpenWork, including OpenWork-managed runtime MCPs that are not visible as workspace files. Returns full SKILL.md content and MCP configs with secret header/environment values redacted (listed in redactedKeys). Use this when packaging skills/MCPs into a plugin or publishing them to a marketplace; declare redacted keys as required inputs instead of inlining values.",
+      description: "Export portable definitions of installed skills and MCP servers from Open One, including Open One-managed runtime MCPs that are not visible as workspace files. Returns full SKILL.md content and MCP configs with secret header/environment values redacted (listed in redactedKeys). Use this when packaging skills/MCPs into a plugin or publishing them to a marketplace; declare redacted keys as required inputs instead of inlining values.",
       args: extensionsExportArgsSchema.shape,
       async execute(rawArgs: unknown, context: OpenCodeContext) {
         try {
@@ -792,7 +708,7 @@ export const OpenWorkExtensionsPreview = async () => {
       },
     },
     openwork_browser_open_url: {
-      description: "Open a URL in the OpenWork built-in browser and return the exact CDP browser_url and target_id to use for browser_* automation tools. Always use this before browser_snapshot/click/fill/eval for web browsing tasks.",
+      description: "Open a URL in the Open One built-in browser and return the exact CDP browser_url and target_id to use for browser_* automation tools. Always use this before browser_snapshot/click/fill/eval for web browsing tasks.",
       args: browserOpenUrlArgsSchema.shape,
       async execute(rawArgs: unknown) {
         const args = browserOpenUrlArgsSchema.parse(rawArgs);
@@ -807,7 +723,7 @@ export const OpenWorkExtensionsPreview = async () => {
       },
     },
     openwork_browser_set_proxy: {
-      description: "Route all OpenWork built-in browser traffic through an HTTP/SOCKS proxy — for example to fetch search results or pages as seen from another location. Applies to every built-in browser tab (including browser_* automation) until cleared with openwork_browser_clear_proxy. If the user has named proxies configured as OPENWORK_BROWSER_PROXY_<NAME> environment variables, pass env:NAME instead of a raw URL.",
+      description: "Route all Open One built-in browser traffic through an HTTP/SOCKS proxy — for example to fetch search results or pages as seen from another location. Applies to every built-in browser tab (including browser_* automation) until cleared with openwork_browser_clear_proxy. If the user has named proxies configured as OPENWORK_BROWSER_PROXY_<NAME> environment variables, pass env:NAME instead of a raw URL.",
       args: browserSetProxyArgsSchema.shape,
       async execute(rawArgs: unknown) {
         const args = browserSetProxyArgsSchema.parse(rawArgs);
@@ -819,7 +735,7 @@ export const OpenWorkExtensionsPreview = async () => {
       },
     },
     openwork_browser_clear_proxy: {
-      description: "Clear the OpenWork built-in browser proxy and restore the system network settings.",
+      description: "Clear the Open One built-in browser proxy and restore the system network settings.",
       args: {},
       async execute() {
         const result = await uiBridgeRequest("/execute", {

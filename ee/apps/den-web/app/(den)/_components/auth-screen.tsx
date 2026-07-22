@@ -1,8 +1,6 @@
 "use client";
 
-import { PaperMeshGradient } from "@openwork/ui/react";
-import { Dithering } from "@paper-design/shaders-react";
-import { Bot, Boxes, Share, type LucideIcon } from "lucide-react";
+import { Cable, Cloud, Terminal, Workflow, type LucideIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { isSamePathname } from "../_lib/client-route";
@@ -10,16 +8,140 @@ import { getMcpOAuthSelectOrganizationRoute } from "../_lib/mcp-oauth-route";
 import { useDenFlow } from "../_providers/den-flow-provider";
 import { AuthPanel } from "./auth-panel";
 
-function Feature({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
+function RouteRow({
+  icon: Icon,
+  label,
+  body,
+  badge,
+}: {
+  icon: LucideIcon;
+  label: string;
+  body: string;
+  badge: string;
+}) {
   return (
-    <div className="flex flex-col items-start gap-3.5 px-4 py-5 sm:px-5">
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-md">
-        <Icon className="h-[18px] w-[18px] text-white" strokeWidth={1.75} />
+    <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-[#d7e2de] bg-white/70 px-3.5 py-3 shadow-[0_10px_30px_-24px_rgba(1,22,39,0.35)]">
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d9e7e1] bg-[#f4fbf7] text-[#09664f]">
+        <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
       </span>
       <div className="min-w-0">
-        <p className="m-0 text-[13px] font-medium leading-tight text-white">{title}</p>
-        <p className="m-0 mt-1 text-[11.5px] leading-snug text-white/60">{body}</p>
+        <p className="m-0 text-[13px] font-semibold leading-tight text-[#011627]">{label}</p>
+        <p className="m-0 mt-1 text-[12px] leading-snug text-[#667085]">{body}</p>
       </div>
+      <span className="rounded-full border border-[#dbe7e2] bg-[#f8fbfa] px-2.5 py-1 text-[11px] font-semibold text-[#35544a]">
+        {badge}
+      </span>
+    </div>
+  );
+}
+
+function StatusTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[#d7e2de] bg-white/60 px-3.5 py-3">
+      <p className="m-0 text-[11px] font-semibold uppercase leading-none text-[#6b7f78]">{label}</p>
+      <p className="m-0 mt-2 text-[13px] font-semibold text-[#011627]">{value}</p>
+    </div>
+  );
+}
+
+function ControlRoomPanel() {
+  return (
+    <div className="relative hidden min-h-[220px] overflow-hidden bg-[#eef4f2] px-6 py-7 sm:px-8 sm:py-9 md:px-10 md:py-10 lg:block lg:min-h-[560px]">
+      <div
+        className="absolute inset-0 opacity-70"
+        style={{
+          backgroundImage:
+            "linear-gradient(#d7e2de 1px, transparent 1px), linear-gradient(90deg, #d7e2de 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
+        aria-hidden
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(140deg,rgba(255,255,255,0.88),rgba(255,255,255,0.2)_48%,rgba(13,148,136,0.14))]" aria-hidden />
+      <div className="absolute inset-x-8 top-8 h-px bg-[#011627]/10" aria-hidden />
+      <div className="absolute inset-y-8 left-8 w-px bg-[#011627]/10" aria-hidden />
+
+      <div className="relative z-10 flex h-full flex-col">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <img src="/open-one-mark.svg" alt="Open One" className="h-9 w-9" />
+            <div>
+              <p className="m-0 text-[13px] font-semibold text-[#011627]">Open One Control</p>
+              <p className="m-0 mt-0.5 text-[11px] font-medium text-[#667085]">Local-first command center</p>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 rounded-full border border-[#cfdcd7] bg-white/70 px-3 py-1.5 text-[11px] font-semibold text-[#35544a] xl:flex">
+            <span className="h-2 w-2 rounded-full bg-[#12b76a]" />
+            Org scoped
+          </div>
+        </div>
+
+        <div className="flex-[0.65]" aria-hidden />
+
+        <div className="max-w-[34rem]">
+          <p className="m-0 text-[11px] font-bold uppercase text-[#09664f]">Control plane for agent work</p>
+          <h1 className="m-0 mt-3 max-w-[12ch] text-[2.25rem] font-semibold leading-[0.98] text-[#011627] sm:text-[2.6rem] md:text-[3.15rem]">
+            Bring every agent under one roof.
+          </h1>
+          <p className="m-0 mt-4 max-w-[32rem] text-[14px] leading-6 text-[#4b5f59] sm:text-[15px] sm:leading-7">
+            Route local files, team MCP connections, cloud workers, and model policy through one shared workspace.
+          </p>
+        </div>
+
+        <div className="flex-[0.55]" aria-hidden />
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_13.5rem]">
+          <div className="rounded-[1.5rem] border border-[#cfdcd7] bg-[#f8fbfa]/80 p-3.5 shadow-[0_24px_50px_-38px_rgba(1,22,39,0.55)]">
+            <div className="mb-3 flex items-center justify-between gap-3 px-1">
+              <p className="m-0 text-[12px] font-semibold text-[#011627]">Workspace routes</p>
+              <span className="rounded-full bg-[#011627] px-2.5 py-1 text-[11px] font-semibold text-white">Live</span>
+            </div>
+            <div className="grid gap-2.5">
+              <RouteRow icon={Terminal} label="Desktop runtime" body="Keeps file work local." badge="Local" />
+              <RouteRow icon={Cable} label="MCP connections" body="Shared by workspace policy." badge="Scoped" />
+              <RouteRow icon={Cloud} label="Cloud workers" body="Run handoffs in the background." badge="Queued" />
+            </div>
+          </div>
+
+          <div className="hidden rounded-[1.5rem] border border-[#cfdcd7] bg-[#011627] p-4 text-white shadow-[0_24px_50px_-38px_rgba(1,22,39,0.75)] xl:block">
+            <div className="flex items-center gap-2">
+              <Workflow className="h-4 w-4 text-[#7dd3c7]" strokeWidth={1.8} />
+              <p className="m-0 text-[12px] font-semibold">Policy lane</p>
+            </div>
+            <div className="mt-5 grid gap-4">
+              {["Approve", "Connect", "Run"].map((step, index) => (
+                <div key={step} className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-center gap-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/12 bg-white/10 text-[11px] font-semibold text-white">
+                    {index + 1}
+                  </span>
+                  <span className="text-[13px] font-medium text-white/80">{step}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.06] p-3 text-[12px] leading-5 text-white/70">
+              Same workspace rules, whether work starts from the app or the cloud.
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-auto pt-5">
+          <div className="grid grid-cols-3 gap-2">
+            <StatusTile label="Auth" value="SSO ready" />
+            <StatusTile label="Tools" value="Per member" />
+            <StatusTile label="Models" value="Governed" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileBrandHeader() {
+  return (
+    <div className="mb-6 flex items-center gap-2 lg:hidden">
+      <img src="/open-one-mark.svg" alt="Open One" className="h-7 w-7" />
+      <span className="text-[1.15rem] font-semibold tracking-tight text-[var(--dls-text-primary)]">
+        Open One
+      </span>
     </div>
   );
 }
@@ -93,86 +215,13 @@ export function AuthScreen() {
     <section className="den-page flex w-full items-start py-3 sm:py-4 lg:min-h-[calc(100vh-2.5rem)] lg:items-center">
       <div className="den-frame relative w-full overflow-hidden">
         <div className="grid lg:grid-cols-[2fr_1fr]">
-          {/* Brand panel — hidden on mobile; form-only on small screens */}
-          <div className="relative hidden min-h-[220px] overflow-hidden px-6 py-7 sm:px-8 sm:py-9 md:px-10 md:py-10 lg:block lg:min-h-[560px]">
-            <div className="absolute inset-0 z-0">
-              <Dithering
-                speed={0}
-                shape="warp"
-                type="4x4"
-                size={2.5}
-                scale={1}
-                frame={30214.2}
-                colorBack="#00000000"
-                colorFront="#FEFEFE"
-                style={{ backgroundColor: "#142033", width: "100%", height: "100%" }}
-              >
-                <PaperMeshGradient
-                  speed={0.1}
-                  distortion={0.8}
-                  swirl={0.1}
-                  grainMixer={0}
-                  grainOverlay={0}
-                  frame={176868.9}
-                  colors={["#0F172A", "#1E40AF", "#4C1D95", "#0F766E"]}
-                  style={{ width: "100%", height: "100%" }}
-                />
-              </Dithering>
-            </div>
-
-            <div className="relative z-10 flex h-full flex-col">
-              <div className="flex items-center gap-3">
-                <img src="/open-one-mark.svg" alt="Open One" className="h-9 w-9" />
-                <span className="text-[13px] font-medium text-white/80">Open One Control</span>
-              </div>
-
-              {/* Spacers split the space below the logo ~1:2, so the headline
-                  starts about a third of the way down and the features sit at
-                  the bottom. */}
-              <div className="flex-[1]" aria-hidden />
-
-              <div className="grid gap-3 sm:gap-4">
-                <h1 className="max-w-[13ch] text-[2rem] font-semibold leading-[0.95] tracking-[-0.06em] text-white sm:text-[2.35rem] md:text-[3rem]">
-                  One setup, every seat.
-                </h1>
-                <p className="max-w-[34rem] text-[14px] leading-6 text-white/80 sm:text-[15px] sm:leading-7">
-                  Configure once. Your whole team gets the same tools, agents, and providers.
-                </p>
-              </div>
-
-              <div className="flex-[2]" aria-hidden />
-
-              <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.06] backdrop-blur-md">
-                <div className="grid divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                  <Feature
-                    icon={Share}
-                    title="Shared config"
-                    body="Set once, push to the org."
-                  />
-                  <Feature
-                    icon={Bot}
-                    title="Cloud agents"
-                    body="Keep running while you're away."
-                  />
-                  <Feature
-                    icon={Boxes}
-                    title="Your models"
-                    body="Bring your own provider."
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Brand panel is hidden on mobile; the form keeps a compact header. */}
+          <ControlRoomPanel />
 
           {/* Auth form */}
           <div className="flex flex-col justify-center border-[var(--dls-border)] px-5 py-6 sm:px-7 sm:py-8 md:px-9 md:py-10 lg:border-l">
-            {/* Mobile-only brand header — desktop shows the logo in the gradient panel */}
-            <div className="mb-6 flex items-center gap-2 lg:hidden">
-              <img src="/open-one-mark.svg" alt="Open One" className="h-7 w-7" />
-              <span className="text-[1.15rem] font-semibold tracking-tight text-[var(--dls-text-primary)]">
-                Open One
-              </span>
-            </div>
+            {/* Mobile-only brand header. */}
+            <MobileBrandHeader />
             {!sessionHydrated ? (
               <SessionStatusPanel mode="checking" />
             ) : hasResolvedSession ? (

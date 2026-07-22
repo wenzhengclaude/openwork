@@ -51,6 +51,73 @@ import {
 } from "./session-memory";
 import { legacySessionRoute, workspaceSessionRoute } from "./workspace-routes";
 
+type LocalWorkspaceList = Awaited<ReturnType<OpenworkServerClient["listWorkspaces"]>>;
+
+function workspaceDisplayName(workspace: RouteWorkspace) {
+  return (
+    workspace.displayNameResolved?.trim() ||
+    workspace.displayName?.trim() ||
+    workspace.name?.trim() ||
+    workspace.path?.trim() ||
+    t("session.workspace_fallback")
+  );
+}
+
+async function ensureDesktopLocalWorkspacesRegistered(
+  client: OpenworkServerClient,
+  serverList: LocalWorkspaceList,
+  desktopWorkspaces: RouteWorkspace[],
+) {
+  let current = serverList;
+  const serverIds = new Set(current.items.map((workspace) => workspace.id));
+  const serverPaths = new Set(
+    current.items.flatMap((workspace) => {
+      const normalizedPath = normalizeDirectoryPath(workspace.path ?? "");
+      return normalizedPath ? [normalizedPath] : [];
+    }),
+  );
+
+  for (const workspace of desktopWorkspaces) {
+    if (workspace.workspaceType === "remote") continue;
+    const normalizedPath = normalizeDirectoryPath(workspace.path ?? "");
+    if (!normalizedPath || serverIds.has(workspace.id) || serverPaths.has(normalizedPath)) continue;
+
+    try {
+      const created = await client.createLocalWorkspace({
+        folderPath: workspace.path,
+        name: workspaceDisplayName(workspace),
+        preset: workspace.preset?.trim() || "starter",
+      });
+      current = {
+        items: created.workspaces,
+        workspaces: created.workspaces,
+        activeId: created.activeId ?? current.activeId ?? null,
+      };
+      serverIds.clear();
+      serverPaths.clear();
+      for (const item of current.items) {
+        serverIds.add(item.id);
+        const itemPath = normalizeDirectoryPath(item.path ?? "");
+        if (itemPath) serverPaths.add(itemPath);
+      }
+      recordInspectorEvent("route.workspace.registered_from_desktop", {
+        route: "session",
+        workspaceId: workspace.id,
+        path: workspace.path,
+      });
+    } catch (error) {
+      recordInspectorEvent("route.workspace.register_from_desktop.error", {
+        route: "session",
+        workspaceId: workspace.id,
+        path: workspace.path,
+        message: describeRouteError(error),
+      });
+    }
+  }
+
+  return current;
+}
+
 export type UseWorkspaceRouteStateInput = {
   /** Invoked when the openwork-server settings-changed event fires (the route bumps its settings version). */
   onServerSettingsChanged: () => void;
@@ -358,7 +425,11 @@ export function useWorkspaceRouteState(input: UseWorkspaceRouteStateInput) {
         token: resolvedToken,
         hostToken: resolvedHostToken || undefined,
       });
-      const list = await openworkClient.listWorkspaces();
+      const list = await ensureDesktopLocalWorkspacesRegistered(
+        openworkClient,
+        await openworkClient.listWorkspaces(),
+        desktopWorkspaces,
+      );
       const nextWorkspaces = orderRouteWorkspaces(
         mergeRouteWorkspaces(list.items, desktopWorkspaces),
         workspaceOrderIdsRef.current,

@@ -186,7 +186,7 @@ export function WorkspaceClaimScreen({
         "/v1/auth/desktop-handoff",
         {
           method: "POST",
-          body: JSON.stringify({ desktopScheme: "openwork" }),
+          body: JSON.stringify({ desktopScheme: "openone" }),
         },
         12000,
       );

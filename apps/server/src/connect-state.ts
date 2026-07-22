@@ -46,7 +46,7 @@ function normalizeConnectState(value: unknown): PersistedConnectState {
 
 export function googleWorkspaceConnectGuidance(cloudMcpPresent: boolean): string {
   return cloudMcpPresent
-    ? "Google Workspace is available through the OpenWork Cloud connection: call search_capabilities to find the capability, then execute_capability to run it. Do not tell the user to reconfigure extensions; the relevant settings surface is Settings > Connect."
+    ? "Google Workspace is available through the Open One Cloud connection: call search_capabilities to find the capability, then execute_capability to run it. Do not tell the user to reconfigure extensions; the relevant settings surface is Settings > Connect."
     : "Google Workspace is not connected on this device. Direct the user to Settings > Connect to connect their account. Do not direct them to Settings > Extensions.";
 }
 

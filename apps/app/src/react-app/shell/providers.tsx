@@ -10,6 +10,7 @@ import { DenAuthProvider } from "@/react-app/domains/cloud/den-auth-provider";
 import { BrandThemeProvider } from "@/react-app/domains/cloud/brand-theme";
 import { DesktopConfigProvider } from "@/react-app/domains/cloud/desktop-config-provider";
 import { RestrictionNoticeProvider } from "@/react-app/domains/cloud/restriction-notice-provider";
+import { ElectronUpdaterProvider } from "@/react-app/domains/settings/state/electron-updater-provider";
 import { LocalProvider } from "@/react-app/kernel/local-provider";
 import { ServerProvider } from "@/react-app/kernel/server-provider";
 import { ArchitectureMismatchGate } from "./architecture-mismatch-gate";
@@ -71,7 +72,9 @@ export function AppProviders({ children }: AppProvidersProps) {
               <BrandThemeProvider>
               <RestrictionNoticeProvider>
                 <LocalProvider>
-                  <ReloadCoordinatorProvider>{children}</ReloadCoordinatorProvider>
+                  <ElectronUpdaterProvider>
+                    <ReloadCoordinatorProvider>{children}</ReloadCoordinatorProvider>
+                  </ElectronUpdaterProvider>
                   <Toaster />
                 </LocalProvider>
               </RestrictionNoticeProvider>

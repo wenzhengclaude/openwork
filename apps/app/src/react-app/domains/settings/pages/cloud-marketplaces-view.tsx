@@ -23,6 +23,13 @@ import {
   orgMcpConnectionActionLabel,
   type ExtensionItem,
 } from "@/react-app/domains/settings/extension-items";
+import {
+  SAP_DEV_PLUGIN_BUNDLE,
+  builtInClaudePluginActionLabel,
+  builtInClaudePluginBundleSummary,
+  builtInClaudePluginStatus,
+  type BuiltInClaudePluginBundle,
+} from "@/react-app/domains/settings/built-in-claude-plugin-bundles";
 import { useCloudSession } from "@/react-app/domains/settings/cloud/cloud-session-provider";
 import type { useDenSession } from "@/react-app/domains/settings/cloud/use-den-session";
 import {
@@ -62,6 +69,7 @@ type DenSettingsExtensionsStore = {
   pendingCloudPluginChanges: () => Record<string, PendingCloudPluginChange>;
   refreshCloudOrgMarketplaces: (options?: { force?: boolean }) => Promise<unknown>;
   importCloudOrgPlugin: (marketplaceId: string | null, plugin: DenOrgPlugin) => Promise<AsyncResult>;
+  installClaudePlugin: (url: string) => Promise<AsyncResult>;
   removeCloudOrgPlugin: (pluginId: string) => Promise<AsyncResult>;
 };
 
@@ -88,6 +96,19 @@ type BuiltInMarketplaceRow = {
   searchableText: string;
 };
 
+type BuiltInClaudePluginMarketplaceRow = {
+  source: "built-in-claude-plugin";
+  marketplaceId: "openwork-builtins";
+  marketplaceName: string;
+  bundle: BuiltInClaudePluginBundle;
+  status: MarketplacePackageStatus;
+  installedCount: number;
+  installedPluginIds: string[];
+  resourceLabels: string[];
+  contributionLabels: string[];
+  searchableText: string;
+};
+
 type OrgMcpMarketplaceRow = {
   source: "org-mcp";
   marketplaceId: "org-mcp-connections";
@@ -98,7 +119,7 @@ type OrgMcpMarketplaceRow = {
   searchableText: string;
 };
 
-type MarketplaceRow = MarketplacePackageRow | BuiltInMarketplaceRow | OrgMcpMarketplaceRow;
+type MarketplaceRow = MarketplacePackageRow | BuiltInMarketplaceRow | BuiltInClaudePluginMarketplaceRow | OrgMcpMarketplaceRow;
 
 export function shouldShowMarketplaceRows(isSignedIn: boolean, activeOrgId: string) {
   return isSignedIn && activeOrgId.trim().length > 0;
@@ -192,6 +213,20 @@ function statusClass(status: MarketplacePackageStatus) {
     default:
       return "border-gray-6/60 bg-gray-3/20 text-gray-11";
   }
+}
+
+function marketplaceRowName(row: MarketplaceRow) {
+  if (row.source === "cloud") return row.plugin.name;
+  if (row.source === "built-in") return row.entry.name;
+  if (row.source === "built-in-claude-plugin") return row.bundle.name;
+  return row.item.name;
+}
+
+function marketplaceRowKey(row: MarketplaceRow) {
+  if (row.source === "cloud") return `${row.marketplaceId}:${row.plugin.id}`;
+  if (row.source === "built-in") return `${row.marketplaceId}:${row.entry.id ?? row.entry.name}`;
+  if (row.source === "built-in-claude-plugin") return `${row.marketplaceId}:${row.bundle.id}`;
+  return row.item.id;
 }
 
 export function CloudMarketplacesView({
@@ -301,7 +336,7 @@ export function CloudMarketplacesView({
       return {
         source: "built-in",
         marketplaceId: "openwork-builtins",
-        marketplaceName: "OpenWork Built-ins",
+        marketplaceName: "Open One Built-ins",
         entry,
         active,
         status: item?.installState ?? (active ? "installed" : "available"),
@@ -314,6 +349,36 @@ export function CloudMarketplacesView({
       };
     });
   }, [builtInEntries, enablementContext, extensionItemsByBuiltInId, isBuiltInConnected]);
+
+  const builtInClaudePluginRows = React.useMemo<BuiltInClaudePluginMarketplaceRow[]>(() => {
+    const state = builtInClaudePluginStatus(SAP_DEV_PLUGIN_BUNDLE, importedPlugins);
+    const summary = builtInClaudePluginBundleSummary(SAP_DEV_PLUGIN_BUNDLE, importedPlugins);
+    return [{
+      source: "built-in-claude-plugin",
+      marketplaceId: "openwork-builtins",
+      marketplaceName: "Open One Built-ins",
+      bundle: SAP_DEV_PLUGIN_BUNDLE,
+      status: state.status,
+      installedCount: state.installedCount,
+      installedPluginIds: state.installedPluginIds,
+      resourceLabels: summary.resourceLabels,
+      contributionLabels: summary.contributionLabels,
+      searchableText: [
+        SAP_DEV_PLUGIN_BUNDLE.name,
+        SAP_DEV_PLUGIN_BUNDLE.description,
+        SAP_DEV_PLUGIN_BUNDLE.sourceUrl,
+        SAP_DEV_PLUGIN_BUNDLE.homepageUrl,
+        ...SAP_DEV_PLUGIN_BUNDLE.plugins.flatMap((plugin) => [
+          plugin.name,
+          plugin.description,
+          plugin.components,
+        ]),
+        ...summary.resourceLabels,
+        ...summary.contributionLabels,
+        "sap abap gui scripting s4hana migration transport atc ddic rfc",
+      ].join(" ").toLowerCase(),
+    }];
+  }, [importedPlugins]);
 
   const orgMcpRows = React.useMemo<OrgMcpMarketplaceRow[]>(() => {
     if (connectEnabled === true) return [];
@@ -338,7 +403,14 @@ export function CloudMarketplacesView({
     });
   }, [connectEnabled, extensionItems]);
 
-  const rows = React.useMemo<MarketplaceRow[]>(() => canShowRows ? [...builtInRows, ...cloudRows, ...orgMcpRows] : [], [builtInRows, canShowRows, cloudRows, orgMcpRows]);
+  const rows = React.useMemo<MarketplaceRow[]>(
+    () => [
+      ...builtInRows,
+      ...builtInClaudePluginRows,
+      ...(canShowRows ? [...cloudRows, ...orgMcpRows] : []),
+    ],
+    [builtInClaudePluginRows, builtInRows, canShowRows, cloudRows, orgMcpRows],
+  );
 
   React.useEffect(() => {
     if (detailRow?.source !== "org-mcp") return;
@@ -357,12 +429,12 @@ export function CloudMarketplacesView({
   const displayRows = rows.length > 0 ? rows : busy ? lastRowsRef.current : rows;
 
   const marketplaceOptions = React.useMemo(
-    () => canShowRows ? [
-      ...(builtInRows.length > 0 ? [{ id: "openwork-builtins", name: "OpenWork Built-ins" }] : []),
-      ...marketplaces.map((marketplace) => ({ id: marketplace.marketplace.id, name: marketplace.marketplace.name })),
-      ...(orgMcpRows.length > 0 ? [{ id: "org-mcp-connections", name: "Organization MCP Connections" }] : []),
-    ] : [],
-    [builtInRows.length, canShowRows, marketplaces, orgMcpRows.length],
+    () => [
+      ...(builtInRows.length > 0 || builtInClaudePluginRows.length > 0 ? [{ id: "openwork-builtins", name: "Open One Built-ins" }] : []),
+      ...(canShowRows ? marketplaces.map((marketplace) => ({ id: marketplace.marketplace.id, name: marketplace.marketplace.name })) : []),
+      ...(canShowRows && orgMcpRows.length > 0 ? [{ id: "org-mcp-connections", name: "Organization MCP Connections" }] : []),
+    ],
+    [builtInClaudePluginRows.length, builtInRows.length, canShowRows, marketplaces, orgMcpRows.length],
   );
 
   const visibleRows = React.useMemo(() => {
@@ -485,6 +557,59 @@ export function CloudMarketplacesView({
     [actionId, extensions],
   );
 
+  const installBuiltInClaudePluginBundle = React.useCallback(
+    async (row: BuiltInClaudePluginMarketplaceRow) => {
+      if (actionId) return;
+
+      setActionId(row.bundle.id);
+      setActionError(null);
+
+      let installed = 0;
+      try {
+        for (const plugin of row.bundle.plugins) {
+          if (importedPlugins[plugin.id]) continue;
+          const result = await extensions.installClaudePlugin(plugin.url);
+          if (!result.ok) throw new Error(result.message);
+          installed += 1;
+        }
+        toast.success(installed > 0
+          ? `Installed ${row.bundle.name} (${installed} plugin${installed === 1 ? "" : "s"}).`
+          : `${row.bundle.name} is already installed.`);
+        setDetailRow(null);
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : `Failed to install ${row.bundle.name}.`);
+      } finally {
+        setActionId(null);
+      }
+    },
+    [actionId, extensions, importedPlugins],
+  );
+
+  const removeBuiltInClaudePluginBundle = React.useCallback(
+    async (row: BuiltInClaudePluginMarketplaceRow) => {
+      if (actionId) return;
+
+      const installedPlugins = row.bundle.plugins.filter((plugin) => Boolean(importedPlugins[plugin.id]));
+      if (installedPlugins.length === 0) return;
+      setActionId(row.bundle.id);
+      setActionError(null);
+
+      try {
+        for (const plugin of installedPlugins.slice().reverse()) {
+          const result = await extensions.removeCloudOrgPlugin(plugin.id);
+          if (!result.ok) throw new Error(result.message);
+        }
+        toast.success(`Removed ${row.bundle.name}.`);
+        setDetailRow(null);
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : `Failed to remove ${row.bundle.name}.`);
+      } finally {
+        setActionId(null);
+      }
+    },
+    [actionId, extensions, importedPlugins],
+  );
+
   const updatableRows = React.useMemo(
     () => cloudRows.filter((row) => row.status === "update_available" && !isCloudBuiltInPlugin(row.plugin)),
     [cloudRows],
@@ -555,7 +680,7 @@ export function CloudMarketplacesView({
       {!isSignedIn ? (
         <SettingsNotice>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <span>You can use OpenWork without an account. Sign in to OpenWork Cloud to load the Marketplace, including OpenWork's built-in extensions and any organization marketplaces.</span>
+            <span>You can use Open One built-ins without an account. Sign in to Open One Cloud to load organization Marketplace extensions.</span>
             <Button size="sm" onClick={onOpenAccount}>
               {t("skills.share_team_sign_in")}
             </Button>
@@ -640,15 +765,16 @@ export function CloudMarketplacesView({
       {visibleRows.length > 0 ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
           {visibleRows.map((row) => {
-            const pluginName = row.source === "cloud" ? row.plugin.name : row.source === "built-in" ? row.entry.name : row.item.name;
+            const pluginName = marketplaceRowName(row);
             const isHighlighted = highlightPluginName != null && pluginName === highlightPluginName;
             return (
               <MarketplaceCard
-                key={row.source === "cloud" ? `${row.marketplaceId}:${row.plugin.id}` : row.source === "built-in" ? `${row.marketplaceId}:${row.entry.id ?? row.entry.name}` : row.item.id}
+                key={marketplaceRowKey(row)}
                 actionId={actionId}
                 row={row}
                 onOpenDetail={setDetailRow}
                 onUpdatePlugin={importPlugin}
+                onInstallBuiltInClaudePlugin={installBuiltInClaudePluginBundle}
                 connectEnabled={connectEnabled}
                 orgMcpConnectingId={orgMcpConnectingId}
                 orgMcpDisconnectingId={orgMcpDisconnectingId}
@@ -684,6 +810,15 @@ export function CloudMarketplacesView({
           connecting={builtInConnectingName === detailRow.entry.name}
           configSlot={configSlotForBuiltIn?.(detailRow.entry) ?? null}
           onSetEnabled={setBuiltInEnabled}
+          onClose={() => setDetailRow(null)}
+        />
+      ) : detailRow?.source === "built-in-claude-plugin" ? (
+        <BuiltInClaudePluginDetailModal
+          row={detailRow}
+          actionBusy={actionId === detailRow.bundle.id}
+          builtInDisabled={builtInExtensionsDisabled}
+          onInstall={installBuiltInClaudePluginBundle}
+          onRemove={removeBuiltInClaudePluginBundle}
           onClose={() => setDetailRow(null)}
         />
       ) : detailRow?.source === "org-mcp" ? (
@@ -723,6 +858,7 @@ function MarketplaceCard(props: {
   row: MarketplaceRow;
   onOpenDetail: (row: MarketplaceRow) => void;
   onUpdatePlugin: (marketplaceId: string | null, plugin: DenOrgPlugin) => void | Promise<void>;
+  onInstallBuiltInClaudePlugin: (row: BuiltInClaudePluginMarketplaceRow) => void | Promise<void>;
   connectEnabled?: boolean;
   orgMcpConnectingId: string | null;
   orgMcpDisconnectingId: string | null;
@@ -765,6 +901,41 @@ function MarketplaceCard(props: {
           actionLabel={row.active ? "Manage" : "View setup"}
           onClick={() => onOpenDetail(row)}
         />
+      </div>
+    );
+  }
+
+  if (row.source === "built-in-claude-plugin") {
+    const actionBusy = actionId === row.bundle.id;
+    const connected = row.status === "installed";
+    const partial = row.installedCount > 0 && !connected;
+    return (
+      <div ref={highlightRef} className={`flex flex-col gap-2 ${highlightClass}`}>
+        <ExtensionCard
+          name={row.bundle.name}
+          description={row.bundle.description}
+          url={row.bundle.sourceUrl}
+          kind="plugin"
+          connected={connected}
+          connectedLabel="Installed"
+          statusLabel={partial ? "Partial" : "Built-in"}
+          statusTone={partial ? "warning" : "neutral"}
+          connecting={actionBusy}
+          disabled={props.builtInDisabled}
+          disabledReason={props.builtInDisabled ? "Disabled by organization" : null}
+          actionLabel={actionBusy ? "Installing..." : builtInClaudePluginActionLabel(row)}
+          onClick={() => onOpenDetail(row)}
+        />
+        {partial ? (
+          <Button
+            size="xs"
+            variant="secondary"
+            disabled={Boolean(actionId) || props.builtInDisabled}
+            onClick={() => void props.onInstallBuiltInClaudePlugin(row)}
+          >
+            {actionBusy ? "Installing..." : "Install missing"}
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -883,6 +1054,82 @@ function BuiltInMarketplaceDetailModal(props: {
   );
 }
 
+function BuiltInClaudePluginDetailModal(props: {
+  row: BuiltInClaudePluginMarketplaceRow;
+  actionBusy: boolean;
+  builtInDisabled: boolean;
+  onInstall: (row: BuiltInClaudePluginMarketplaceRow) => void | Promise<void>;
+  onRemove: (row: BuiltInClaudePluginMarketplaceRow) => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const { row, actionBusy, builtInDisabled, onClose, onInstall, onRemove } = props;
+  const connected = row.status === "installed";
+  const partial = row.installedCount > 0 && !connected;
+  return (
+    <ExtensionDetailModal
+      open
+      onClose={onClose}
+      name={row.bundle.name}
+      description={row.bundle.description}
+      kind="plugin"
+      typeLabel="Built-in skill pack"
+      url={row.bundle.sourceUrl}
+      connected={connected}
+      connectedLabel="Installed"
+      disconnectedLabel={partial ? "Partially installed" : "Not installed"}
+      connecting={actionBusy}
+      disabledReason={builtInDisabled ? "Disabled by organization" : null}
+      connectLabel={partial ? "Install missing" : "Install"}
+      connectingLabel="Installing..."
+      uninstallLabel="Remove"
+      showEnablementCard={false}
+      manifestTitle="Package contents"
+      resourceLabels={row.resourceLabels}
+      contributionLabels={row.contributionLabels}
+      onConnect={!builtInDisabled && !connected ? () => void onInstall(row) : undefined}
+      onUninstall={!builtInDisabled && row.installedCount > 0 ? () => void onRemove(row) : undefined}
+      configSlot={(
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <SettingsPill className={partial ? "border-amber-7/30 bg-amber-3/20 text-amber-11" : statusClass(row.status)}>
+              {partial ? `${row.installedCount}/${row.bundle.plugins.length} installed` : statusLabel(row.status)}
+            </SettingsPill>
+            <SettingsPill>{row.marketplaceName}</SettingsPill>
+            <SettingsPill>GPL-3.0 upstream</SettingsPill>
+            <SettingsPill>Windows only</SettingsPill>
+          </div>
+          <SettingsNotice>
+            Install order matters: Open One installs sap-dev-core first, then sap-gen-code, sap-migrate, and sap-project. The core plugin supplies the shared SAP helper scripts used by the companion plugins.
+          </SettingsNotice>
+          <SettingsNotice>
+            This adds a built-in installer for the upstream GitHub plugins. It does not bundle SAP NCo binaries; SAP GUI for Windows, GUI Scripting, and any SAP authorizations still need to be configured on the user's machine.
+          </SettingsNotice>
+          <div className="rounded-xl border border-dls-border bg-dls-hover px-3 py-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Plugins</div>
+            <div className="mt-3 grid gap-2">
+              {row.bundle.plugins.map((plugin, index) => {
+                const installed = row.installedPluginIds.includes(plugin.id);
+                return (
+                  <div key={plugin.id} className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-card-foreground">{index + 1}. {plugin.name}</div>
+                        <div className="text-xs text-muted-foreground">{plugin.components}</div>
+                      </div>
+                      <SettingsPill>{installed ? "Installed" : index === 0 ? "Core first" : "Companion"}</SettingsPill>
+                    </div>
+                    <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{plugin.description}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    />
+  );
+}
+
 function OrgMcpConnectionDetailModal(props: {
   row: OrgMcpMarketplaceRow;
   connecting: boolean;
@@ -921,7 +1168,7 @@ function OrgMcpConnectionDetailModal(props: {
             <SettingsPill>MCP</SettingsPill>
           </div>
           <SettingsNotice>
-            OpenWork stores this sign-in in the organization cloud. Once connected, your desktop agent can use the tools through OpenWork Cloud Control.
+            Open One stores this sign-in in the organization cloud. Once connected, your desktop agent can use the tools through Open One Cloud Control.
           </SettingsNotice>
         </div>
       )}

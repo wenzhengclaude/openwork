@@ -47,6 +47,8 @@ export type ExtensionDetailModalProps = {
   preview?: boolean;
   /** Whether this extension is alpha / untested. */
   beta?: boolean;
+  /** Override the generic type label for grouped or packaged entries. */
+  typeLabel?: string;
   /** Reason this item is visible but unavailable. */
   disabledReason?: string | null;
   /** Remote URL if applicable. */
@@ -57,6 +59,8 @@ export type ExtensionDetailModalProps = {
   resourceLabels?: string[];
   /** Declarative UI/runtime contribution labels from an extension manifest. */
   contributionLabels?: string[];
+  /** Title for the resources/contributions section. */
+  manifestTitle?: string;
   /** Whether OAuth is required. */
   oauth?: boolean;
   /** Exact local command this extension will launch, when known. */
@@ -93,15 +97,15 @@ const kindLabel: Record<ExtensionKind, string> = {
   plugin: "Plugin",
   skill: "Skill",
   "ui-control": "UI Control",
-  extension: "OpenWork Extension",
+  extension: "Open One Extension",
 };
 
 const kindDesc: Record<ExtensionKind, string> = {
   mcp: "Connects as a Model Context Protocol server, giving your agent access to external tools and data.",
-  plugin: "Extends OpenWork with additional capabilities managed by your organization.",
+  plugin: "Extends Open One with additional capabilities managed by your organization.",
   skill: "A reusable workflow that your agent can execute on demand.",
-  "ui-control": "Lets another MCP client inspect and drive this OpenWork desktop UI through a local stdio wrapper.",
-  extension: "An OpenWork extension that adds tools, providers, or integrations to your workspace.",
+  "ui-control": "Lets another MCP client inspect and drive this Open One desktop UI through a local stdio wrapper.",
+  extension: "An Open One extension that adds tools, providers, or integrations to your workspace.",
 };
 
 const uiControlClientConfig = `{
@@ -192,11 +196,13 @@ export function ExtensionDetailModal({
   hidden = false,
   preview = false,
   beta = false,
+  typeLabel,
   disabledReason = null,
   url,
   setupInstructions,
   resourceLabels = [],
   contributionLabels = [],
+  manifestTitle = "Extension manifest",
   oauth,
   launchCommand,
   environment,
@@ -217,6 +223,7 @@ export function ExtensionDetailModal({
 }: ExtensionDetailModalProps) {
   "use memo";
   const resolvedIconSrc = resolveExtensionIconUrl({ iconSrc, iconSlug, serviceUrl: url });
+  const resolvedTypeLabel = typeLabel ?? kindLabel[kind];
 
   return (
     <Dialog
@@ -263,7 +270,7 @@ export function ExtensionDetailModal({
             <div className="min-w-0 flex flex-col gap-1 justify-center self-stretch">
               <DialogTitle>{name}</DialogTitle>
               <DialogDescription className="flex flex-wrap items-center gap-2">
-                <span>{kindLabel[kind]}</span>
+                <span>{resolvedTypeLabel}</span>
                 {preview ? (
                   <span className="rounded-md bg-blue-3 px-1.5 py-0.5 text-[10px] font-medium text-blue-11">
                     Preview
@@ -304,7 +311,7 @@ export function ExtensionDetailModal({
             {resourceLabels.length > 0 || contributionLabels.length > 0 ? (
               <Card variant="outline" size="sm">
                 <CardHeader>
-                  <CardTitle>Extension manifest</CardTitle>
+                  <CardTitle>{manifestTitle}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 text-sm">
@@ -342,7 +349,7 @@ export function ExtensionDetailModal({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Type</span>
-                    <span className="font-medium text-card-foreground">{kindLabel[kind]}</span>
+                    <span className="font-medium text-card-foreground">{resolvedTypeLabel}</span>
                   </div>
 
                   {url ? (
@@ -559,7 +566,7 @@ function UiControlConnectionDetails(props: UiControlConnectionDetailsProps) {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-2 text-sm leading-relaxed text-muted-foreground">
-            <div>OpenWork desktop starts a private localhost bridge automatically.</div>
+            <div>Open One desktop starts a private localhost bridge automatically.</div>
             <div>Your MCP client starts <span className="font-mono text-card-foreground">openwork-ui-mcp</span> over stdio; the wrapper discovers the bridge and proxies UI tools to it.</div>
             <div>Do not point clients at the random localhost bridge URL directly.</div>
           </div>

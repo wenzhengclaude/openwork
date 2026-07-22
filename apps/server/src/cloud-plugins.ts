@@ -8,6 +8,7 @@ import { ApiError } from "./errors.js";
 import { parseFrontmatter, buildFrontmatter } from "./frontmatter.js";
 import { addMcp, removeMcp } from "./mcp.js";
 import { ensureDir } from "./utils.js";
+import { managedOpenCodeSkillConflictWarnings, syncManagedOpenCodeSkills } from "./managed-opencode-skills.js";
 
 const OPENCODE_SKILL_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const OPENCODE_MCP_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
@@ -85,6 +86,7 @@ const cloudPluginInstallConfigs = sqliteTable("cloud_plugin_install_configs", {
 });
 
 type CloudPluginDb = {
+  close: () => void;
   get: (workspaceId: string) => { configJson: string } | undefined;
   upsert: (value: { workspaceId: string; configJson: string; updatedAt: number }) => void;
 };
@@ -112,6 +114,32 @@ function readStringRecord(value: unknown): Record<string, string> | null {
     if (text) output[key] = text;
   }
   return Object.keys(output).length ? output : null;
+}
+
+function readSkillExtraFilesPayload(value: unknown): Array<{ relativePath: string; content: string; versionId: string | null }> {
+  if (!isRecord(value) || !Array.isArray(value.extraFiles)) return [];
+  return value.extraFiles.flatMap((entry) => {
+    if (!isRecord(entry)) return [];
+    const relativePath = readString(entry.relativePath);
+    const content = typeof entry.content === "string" ? entry.content : null;
+    if (!relativePath || content == null) return [];
+    const normalized = relativePath.replace(/^\/+/, "");
+    const parts = normalized.split("/").filter(Boolean);
+    if (!normalized || parts.some((part) => part === "." || part === "..") || /^SKILL\.md$/i.test(parts.at(-1) ?? "")) {
+      return [];
+    }
+    return [{ relativePath: normalized, content, versionId: readString(entry.versionId) }];
+  });
+}
+
+function readRelativeSupportPath(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  const relativePath = readString(value.relativePath);
+  if (!relativePath) return null;
+  const normalized = relativePath.replace(/^\/+/, "");
+  const parts = normalized.split("/").filter(Boolean);
+  if (!normalized || parts.some((part) => part === "." || part === "..")) return null;
+  return normalized;
 }
 
 function parseJsonRecord(text: string | null): Record<string, unknown> | null {
@@ -217,6 +245,14 @@ function pluginNamespace(pluginName: string, pluginId: string): string {
   return `${base.replace(/-plugin$/, "")}-plugin`;
 }
 
+const PLUGIN_RUNTIME_OBJECT_TYPES = new Set(["agent", "command", "skill"]);
+
+function sourcePathForObject(object: CloudPluginConfigObject): string {
+  const currentPath = object.currentRelativePath?.trim();
+  if (currentPath) return currentPath;
+  return object.id.includes("/") ? object.id : "";
+}
+
 function normalizePluginSourcePath(path: string, objectType: string, namespace: string): string {
   const parts = path.trim().replace(/^\/+/, "").split("/").filter(Boolean);
   if (parts.length === 0 || parts.some((part) => part === ".." || part === ".")) return "";
@@ -237,12 +273,16 @@ function normalizePluginSourcePath(path: string, objectType: string, namespace: 
   const folderIndex = searchParts.findIndex((part) => part === folder);
   if (folderIndex < 0 || folderIndex === searchParts.length - 1) return "";
   const rest = searchParts.slice(folderIndex + 1);
+  if (objectType === "skill" || (opencodeIndex < 0 && PLUGIN_RUNTIME_OBJECT_TYPES.has(objectType))) {
+    const pluginRest = rest[0] === namespace ? rest.slice(1) : rest;
+    return [".opencode", "plugins", namespace, folder, ...pluginRest].join("/");
+  }
   if (rest[0] === namespace) return [".opencode", folder, ...rest].join("/");
   return [".opencode", folder, namespace, ...rest].join("/");
 }
 
 function getPluginObjectInstallPath(object: CloudPluginConfigObject, namespace: string): string {
-  const existing = normalizePluginSourcePath(object.currentRelativePath ?? "", object.objectType, namespace);
+  const existing = normalizePluginSourcePath(sourcePathForObject(object), object.objectType, namespace);
   if (existing) {
     if (object.objectType === "skill") {
       const parts = existing.split("/").filter(Boolean);
@@ -250,14 +290,14 @@ function getPluginObjectInstallPath(object: CloudPluginConfigObject, namespace: 
       const skillName = /^SKILL\.md$/i.test(lastPart)
         ? parts.at(-2) ?? slugifyConfigObjectName(object.title, object.id)
         : lastPart || slugifyConfigObjectName(object.title, object.id);
-      return `.opencode/skills/${namespace}/${skillName}/SKILL.md`;
+      return `.opencode/plugins/${namespace}/skills/${skillName}/SKILL.md`;
     }
     return existing;
   }
   const name = slugifyConfigObjectName(object.title, object.id);
   switch (object.objectType) {
     case "skill":
-      return `.opencode/skills/${namespace}/${name}/SKILL.md`;
+      return `.opencode/plugins/${namespace}/skills/${name}/SKILL.md`;
     case "agent":
       return `.opencode/agents/${namespace}/${name}.md`;
     case "command":
@@ -275,15 +315,23 @@ function getPluginObjectInstallPath(object: CloudPluginConfigObject, namespace: 
   }
 }
 
-function buildCloudSkillContent(name: string, description: string, body: string): string {
+function buildCloudSkillContent(name: string, description: string, body: string, pluginSupportPath?: string): string {
   const safeDescription = description.replace(/\s+/g, " ").trim();
   const normalizedBody = body.replace(/^\s*\n?/, "");
+  const supportNote = pluginSupportPath
+    ? [
+      "> Open One installed this plugin's runtime files under",
+      `> \`${pluginSupportPath}\`. Resolve plugin-level support and shared resources from that plugin root.`,
+      "",
+    ].join("\n")
+    : "";
   return [
     "---",
     `name: ${JSON.stringify(name)}`,
     `description: ${JSON.stringify(safeDescription)}`,
     "---",
     "",
+    supportNote,
     normalizedBody,
   ].join("\n");
 }
@@ -503,6 +551,7 @@ async function openCloudPluginDb(path: string): Promise<CloudPluginDb> {
     sqlite.run("CREATE TABLE IF NOT EXISTS cloud_plugin_install_configs (workspace_id TEXT PRIMARY KEY NOT NULL, config_json TEXT NOT NULL, updated_at INTEGER NOT NULL)");
     const db = drizzle(sqlite);
     return {
+      close: () => sqlite.close(),
       get: (workspaceId) => db
         .select()
         .from(cloudPluginInstallConfigs)
@@ -526,6 +575,7 @@ async function openCloudPluginDb(path: string): Promise<CloudPluginDb> {
   const get = sqlite.prepare("SELECT config_json AS configJson FROM cloud_plugin_install_configs WHERE workspace_id = ?");
   const upsert = sqlite.prepare("INSERT INTO cloud_plugin_install_configs (workspace_id, config_json, updated_at) VALUES (?, ?, ?) ON CONFLICT(workspace_id) DO UPDATE SET config_json = excluded.config_json, updated_at = excluded.updated_at");
   return {
+    close: () => sqlite.close(),
     get: (workspaceId) => {
       const row = get.get(workspaceId);
       if (!isRecord(row) || typeof row.configJson !== "string") return undefined;
@@ -546,6 +596,20 @@ async function cloudPluginDb(config: ServerConfig): Promise<CloudPluginDb> {
   const db = openCloudPluginDb(path);
   dbByPath.set(path, db);
   return db;
+}
+
+function skillNameFromInstallPath(path: string): string | null {
+  return path.match(/^\.opencode\/plugins\/[^/]+\/skills\/([^/]+)\/SKILL\.md$/)?.[1]
+    ?? path.match(/^\.opencode\/skills\/[^/]+\/([^/]+)\/SKILL\.md$/)?.[1]
+    ?? null;
+}
+
+export async function closeCloudPluginStoresForTests(): Promise<void> {
+  const stores = Array.from(dbByPath.values());
+  dbByPath.clear();
+  for (const store of stores) {
+    (await store).close();
+  }
 }
 
 export async function readInstalledCloudPlugins(config: ServerConfig, workspaceId: string): Promise<WorkspaceCloudImports> {
@@ -578,7 +642,7 @@ function resolveWorkspaceInstallPath(workspaceRoot: string, relativePath: string
   }
   const root = resolve(workspaceRoot);
   const candidate = resolve(root, normalized);
-  if (candidate !== root && !candidate.startsWith(`${root}/`)) {
+  if (candidate !== root && !candidate.startsWith(`${root}/`) && !candidate.startsWith(`${root}\\`)) {
     throw new ApiError(400, "invalid_cloud_plugin_path", `Invalid cloud plugin path: ${relativePath}`);
   }
   return candidate;
@@ -594,6 +658,10 @@ async function removePluginWorkspaceFile(workspaceRoot: string, path: string): P
   if (!path.startsWith(".opencode/")) return;
   const absolutePath = resolveWorkspaceInstallPath(workspaceRoot, path);
   if (/^\.opencode\/skills\/[^/]+\/[^/]+\/SKILL\.md$/.test(path)) {
+    await rm(dirname(absolutePath), { recursive: true, force: true });
+    return;
+  }
+  if (/^\.opencode\/plugins\/[^/]+\/skills\/[^/]+\/SKILL\.md$/.test(path)) {
     await rm(dirname(absolutePath), { recursive: true, force: true });
     return;
   }
@@ -648,12 +716,28 @@ export async function installCloudPlugin(input: {
 
     if (version?.rawSourceText == null) continue;
 
+    if (object.objectType === "custom") {
+      const relativePath = readRelativeSupportPath(version.normalizedPayloadJson);
+      if (!relativePath) continue;
+      const path = `.opencode/plugins/${namespace}/${relativePath}`;
+      await writePluginWorkspaceFile(input.workspaceRoot, path, version.rawSourceText);
+      files.push({
+        configObjectId: object.id,
+        versionId: version.id,
+        objectType: object.objectType,
+        title: object.title,
+        path,
+        updatedAt: object.updatedAt,
+      });
+      continue;
+    }
+
     const path = getPluginObjectInstallPath(object, namespace);
     let content = version.rawSourceText;
     if (object.objectType === "skill") {
       const description = cloudConfigObjectDescription(object) || "Skill";
-      const installName = path.match(/^\.opencode\/skills\/[^/]+\/([^/]+)\/SKILL\.md$/)?.[1] ?? slugifyConfigObjectName(object.title, object.id);
-      content = buildCloudSkillContent(installName, description, extractSkillBodyMarkdown(content));
+      const installName = skillNameFromInstallPath(path) ?? slugifyConfigObjectName(object.title, object.id);
+      content = buildCloudSkillContent(installName, description, extractSkillBodyMarkdown(content), `.opencode/plugins/${namespace}`);
     } else if (object.objectType === "agent") {
       content = buildCloudAgentContent(cloudConfigObjectDescription(object), content);
     } else if (object.objectType === "command") {
@@ -661,6 +745,13 @@ export async function installCloudPlugin(input: {
       content = buildCloudCommandContent(slugifyConfigObjectName(fileName, object.id), cloudConfigObjectDescription(object), content);
     }
     await writePluginWorkspaceFile(input.workspaceRoot, path, content);
+    if (object.objectType === "skill") {
+      const skillDir = path.slice(0, -"/SKILL.md".length);
+      const extraFiles = readSkillExtraFilesPayload(version.normalizedPayloadJson);
+      for (const extra of extraFiles) {
+        await writePluginWorkspaceFile(input.workspaceRoot, `${skillDir}/${extra.relativePath}`, extra.content);
+      }
+    }
     files.push({
       configObjectId: object.id,
       versionId: version.id,
@@ -710,6 +801,9 @@ export async function installCloudPlugin(input: {
     };
   }
 
+  const skillSync = await syncManagedOpenCodeSkills(input.workspaceRoot);
+  warnings.push(...managedOpenCodeSkillConflictWarnings(skillSync));
+
   await writeInstalledCloudPlugins(input.serverConfig, input.workspaceId, (current) => ({
     ...current,
     marketplaces: nextMarketplaces,
@@ -737,6 +831,7 @@ export async function removeCloudPlugin(input: {
     }
     await removePluginWorkspaceFile(input.workspaceRoot, file.path);
   }));
+  await syncManagedOpenCodeSkills(input.workspaceRoot);
 
   const nextPlugins = { ...cloudImports.plugins };
   delete nextPlugins[input.pluginId];

@@ -294,7 +294,7 @@ describe("env routes", () => {
     expect(put.status).toBe(400);
     const body = (await put.json()) as { code: string; message: string };
     expect(body.code).toBe("reserved_env_key");
-    expect(body.message).toBe("Environment variable name is reserved for OpenWork internals");
+    expect(body.message).toBe("Environment variable name is reserved for Open One internals");
     expect(body.message).not.toContain("OPENWORK_TOKEN");
   });
 

@@ -44,6 +44,7 @@ export type OpenAiCompatibleProviderModel = {
   contextWindow?: number;
   outputLimit?: number;
   reasoning?: boolean;
+  reasoningEfforts?: string[];
   modalities?: {
     input: string[];
     output: string[];
@@ -562,6 +563,8 @@ export type OpenworkAgentRunMode = "codex" | "grok-build" | "multi-agent";
 
 export type OpenworkAgentApprovalMode = "ask" | "auto-review" | "full-access" | "custom";
 
+export type OpenworkAgentApprovalReply = "once" | "always" | "reject";
+
 export type OpenworkAgentRuntimeKind = "codex" | "grok-build";
 
 export type OpenworkAgentRunStatus = "starting" | "running" | "completed" | "cancelled" | "failed";
@@ -575,6 +578,8 @@ export type OpenworkAgentRunEventType =
   | "message_delta"
   | "thought_delta"
   | "tool_call"
+  | "approval_requested"
+  | "approval_resolved"
   | "plan"
   | "log"
   | "error"
@@ -604,10 +609,18 @@ export type OpenworkAgentRun = {
   prompt: string;
   model: string | null;
   modelProvider: string | null;
+  modelContextWindow: number | null;
   sessionId: string | null;
+  attachments: OpenworkAgentRunAttachment[];
   createdAt: number;
   updatedAt: number;
   events: OpenworkAgentRunEvent[];
+};
+
+export type OpenworkAgentRunAttachment = {
+  name: string;
+  mime: string;
+  dataUrl: string;
 };
 
 // Fallback for explicit server-mode URL derivation. Desktop local workers replace this
@@ -1177,6 +1190,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
     sessionRead: 12_000,
     status: 6_000,
     config: 10_000,
+    pluginInstall: 120_000,
     workspaceExport: 30_000,
     workspaceImport: 30_000,
     binary: 60_000,
@@ -1338,12 +1352,24 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         { token, hostToken },
       );
     },
-    createAgentRun: (workspaceId: string, payload: { mode: OpenworkAgentRunMode; approvalMode?: OpenworkAgentApprovalMode; prompt: string; model?: string; modelProvider?: string; sessionId?: string }) =>
+    createAgentRun: (workspaceId: string, payload: { mode: OpenworkAgentRunMode; approvalMode?: OpenworkAgentApprovalMode; prompt: string; model?: string; modelProvider?: string; modelContextWindow?: number; sessionId?: string; selectedSkills?: string[]; attachments?: OpenworkAgentRunAttachment[] }) =>
       requestJson<{ run: OpenworkAgentRun }>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/agent-runs`,
         { token, hostToken, method: "POST", body: payload, timeoutMs: 60_000 },
       ),
+    listAgentRuns: (workspaceId: string, options?: { sessionId?: string; limit?: number }) => {
+      const query = new URLSearchParams();
+      const sessionId = options?.sessionId?.trim();
+      if (sessionId) query.set("sessionId", sessionId);
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<{ items: OpenworkAgentRun[] }>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/agent-runs${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
     getAgentRun: (workspaceId: string, runId: string) =>
       requestJson<{ run: OpenworkAgentRun }>(
         baseUrl,
@@ -1355,6 +1381,12 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/cancel`,
         { token, hostToken, method: "POST", timeoutMs: timeouts.status },
+      ),
+    replyAgentRunApproval: (workspaceId: string, runId: string, approvalId: string, reply: OpenworkAgentApprovalReply) =>
+      requestJson<{ ok: true }>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/agent-runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(approvalId)}`,
+        { token, hostToken, method: "POST", body: { reply }, timeoutMs: timeouts.status },
       ),
     streamAgentRunEvents: (
       workspaceId: string,
@@ -1528,7 +1560,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         hostToken,
         method: "POST",
         body: { ...payload, dryRun: true },
-        timeoutMs: timeouts.config,
+        timeoutMs: timeouts.pluginInstall,
       }),
     installClaudePlugin: (workspaceId: string, payload: { url: string; ref?: string }) =>
       requestJson<OpenworkCloudPluginInstallResult & { preview: OpenworkClaudePluginPreview }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/claude-plugins`, {
@@ -1536,7 +1568,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         hostToken,
         method: "POST",
         body: payload,
-        timeoutMs: timeouts.config,
+        timeoutMs: timeouts.pluginInstall,
       }),
     readOpencodeConfigFile: (workspaceId: string, scope: "project" | "global" = "project") => {
       const query = `?scope=${scope}`;

@@ -64,6 +64,7 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group"
+import { t } from "@/i18n";
 import { useOrgListWindow } from "./use-org-list-window";
 
 const RELOAD_AFTER_ONBOARDING_KEY = "openwork.reloadAfterOrgOnboarding";
@@ -109,7 +110,7 @@ function usePreparedBootstrap() {
         if (cancelled) return;
         if (config.prepared?.skillTitle) {
           setPrepared({
-            orgName: config.prepared.orgName || "Your workspace",
+            orgName: config.prepared.orgName || "",
             skillTitle: config.prepared.skillTitle,
             claimLinks: config.claimLinks ?? [],
           });
@@ -123,10 +124,10 @@ function usePreparedBootstrap() {
   return prepared;
 }
 
-const FIRST_TASK_IDEAS = [
-  "Summarize the files in my Downloads folder.",
-  "Create a CSV of my last 10 screenshots with their dates.",
-  "Draft a short intro email about OpenWork I can send my team.",
+const FIRST_TASK_IDEA_KEYS = [
+  "den.org_onboarding_task_idea_downloads",
+  "den.org_onboarding_task_idea_screenshots",
+  "den.org_onboarding_task_idea_intro_email",
 ];
 
 function PreparedWorkspacePage({ prepared }: { prepared: PreparedBootstrapSummary }) {
@@ -154,23 +155,22 @@ function PreparedWorkspacePage({ prepared }: { prepared: PreparedBootstrapSummar
             className="mx-auto flex w-fit items-center gap-2 rounded-full border border-green-6/30 bg-green-2/30 px-3 py-1 text-xs font-semibold text-green-11"
           >
             <CheckCircle2 className="size-3.5" />
-            Setup complete — OpenWork is ready
+            {t("den.org_onboarding_setup_complete_ready")}
           </div>
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
             <BuildingOffice2Icon className="size-7 text-foreground" />
           </div>
-          <PageTitle>{prepared.orgName}</PageTitle>
+          <PageTitle>{prepared.orgName || t("den.org_onboarding_your_workspace")}</PageTitle>
           <div
             data-openwork-prepared-skill={prepared.skillTitle}
             className="mx-auto flex w-fit items-center gap-2 rounded-xl border border-border bg-dls-hover px-3 py-2 text-sm text-foreground"
           >
             <Sparkles className="size-4 text-foreground/60" />
-            First skill ready:
+            {t("den.org_onboarding_first_skill_ready")}
             <span className="font-semibold">{prepared.skillTitle}</span>
           </div>
           <PageDescription>
-            Your workspace and first skill are set up. Try a task to see OpenWork
-            work for you — no further setup needed.
+            {t("den.org_onboarding_prepared_desc")}
           </PageDescription>
         </PageHeader>
 
@@ -178,22 +178,22 @@ function PreparedWorkspacePage({ prepared }: { prepared: PreparedBootstrapSummar
           <div className="mx-auto flex w-full max-w-md flex-col gap-4">
             <div className="rounded-2xl border border-border bg-dls-hover/40 p-4">
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-foreground/60">
-                Try asking
+                {t("den.org_onboarding_try_asking")}
               </div>
               <ul className="flex flex-col gap-2">
-                {FIRST_TASK_IDEAS.map((idea) => (
+                {FIRST_TASK_IDEA_KEYS.map((ideaKey) => (
                   <li
-                    key={idea}
+                    key={ideaKey}
                     className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                   >
-                    {idea}
+                    {t(ideaKey)}
                   </li>
                 ))}
               </ul>
             </div>
 
             <Button size="lg" className="w-full" onClick={startFirstTask}>
-              Open your workspace and try a task
+              {t("den.org_onboarding_open_workspace")}
               <ArrowRight data-icon="inline-end" />
             </Button>
 
@@ -203,7 +203,7 @@ function PreparedWorkspacePage({ prepared }: { prepared: PreparedBootstrapSummar
                 onClick={() => platform.openLink(ownerClaim.url)}
                 className="inline-flex items-center justify-center gap-1.5 text-sm text-foreground/70 transition-colors hover:text-foreground"
               >
-                Claim this workspace to add billing &amp; teammates
+                {t("den.org_onboarding_claim_workspace")}
                 <ArrowUpRightIcon className="size-3.5" />
               </button>
             ) : null}
@@ -277,12 +277,12 @@ export function OrgOnboardingPage() {
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
               <BuildingOffice2Icon className="size-7 text-foreground" />
             </div>
-            <PageTitle>Your organization</PageTitle>
+            <PageTitle>{t("den.org_onboarding_your_org_title")}</PageTitle>
           </PageHeader>
           <PageContent>
             <PageLoading>
               <PageLoadingSpinner />
-              <PageLoadingDescription>Loading organizations...</PageLoadingDescription>
+              <PageLoadingDescription>{t("den.org_onboarding_loading_orgs")}</PageLoadingDescription>
             </PageLoading>
           </PageContent>
         </PageContainer>
@@ -300,11 +300,11 @@ export function OrgOnboardingPage() {
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
               <BuildingOffice2Icon className="size-7 text-foreground" />
             </div>
-            <PageTitle>Choose your organization</PageTitle>
+            <PageTitle>{t("den.org_onboarding_choose_title")}</PageTitle>
             <Alert variant="destructive">
               <CircleAlert />
               <AlertDescription>
-                {error instanceof Error ? error.message : "Unable to load organizations."}
+                {error instanceof Error ? error.message : t("den.org_onboarding_load_error")}
               </AlertDescription>
             </Alert>
           </PageHeader>
@@ -411,14 +411,14 @@ export function ResourceSelectionPage() {
               className="mx-auto flex w-fit items-center gap-2 rounded-full border border-green-6/30 bg-green-2/30 px-3 py-1 text-xs font-semibold text-green-11"
             >
               <CheckCircle2 className="size-3.5" />
-              Setup complete — OpenWork prepared this workspace
+              {t("den.org_onboarding_setup_complete_prepared")}
             </div>
           ) : null}
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
             <BuildingOffice2Icon className="size-7 text-foreground" />
           </div>
           <PageTitle>
-            {orgName || "Your organization"}
+            {orgName || t("den.org_onboarding_your_org_title")}
           </PageTitle>
           {prepared ? (
             <div
@@ -426,7 +426,7 @@ export function ResourceSelectionPage() {
               className="mx-auto flex w-fit items-center gap-2 rounded-xl border border-border bg-dls-hover px-3 py-2 text-sm text-foreground"
             >
               <Sparkles className="size-4 text-foreground/60" />
-              First skill ready:
+              {t("den.org_onboarding_first_skill_ready")}
               <span className="font-semibold">{prepared.skillTitle}</span>
             </div>
           ) : null}
@@ -439,7 +439,7 @@ export function ResourceSelectionPage() {
             </Alert>
           ) : hasResources ? (
             <PageDescription>
-              You have access to the following resources.
+              {t("den.org_onboarding_resources_desc")}
             </PageDescription>
           ) : null}
         </PageHeader>
@@ -448,16 +448,16 @@ export function ResourceSelectionPage() {
           <PageContent>
             <PageLoading>
               <PageLoadingSpinner />
-              <PageLoadingDescription>Loading available resources...</PageLoadingDescription>
+              <PageLoadingDescription>{t("den.org_onboarding_loading_resources")}</PageLoadingDescription>
             </PageLoading>
           </PageContent>
         ) : !hasResources ? (
           <PageContent>
             <Empty className="h-fit flex-none">
               <EmptyHeader>
-                <EmptyTitle>No resources have been configured for this organization yet.</EmptyTitle>
+                <EmptyTitle>{t("den.org_onboarding_empty_resources_title")}</EmptyTitle>
                 <EmptyDescription>
-                  Add AI providers or marketplaces from the OpenWork Cloud dashboard.
+                  {t("den.org_onboarding_empty_resources_desc")}
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
@@ -465,7 +465,7 @@ export function ResourceSelectionPage() {
                   variant="outline"
                   onClick={() => platform.openLink(resolveDenBaseUrls(settings.baseUrl).baseUrl)}
                 >
-                  Open OpenWork Cloud
+                  {t("den.org_onboarding_open_cloud")}
                   <ArrowUpRightIcon data-icon="inline-end" />
                 </Button>
               </EmptyContent>
@@ -483,9 +483,13 @@ export function ResourceSelectionPage() {
                   {providers.length > 0 ? (
                     <Section
                       icon={<CloudIcon className="size-5 text-foreground/60" />}
-                      title="AI Providers"
-                      description="Models you can use in your workspace."
-                      count={`${totalModels} model${totalModels === 1 ? "" : "s"}`}
+                      title={t("den.org_onboarding_ai_providers_title")}
+                      description={t("den.org_onboarding_ai_providers_desc")}
+                      count={
+                        totalModels === 1
+                          ? t("den.org_onboarding_model_count_one")
+                          : t("den.org_onboarding_model_count_other", { value: totalModels })
+                      }
                     >
                       {providers.map((provider) => (
                         <ProviderCard
@@ -502,9 +506,13 @@ export function ResourceSelectionPage() {
                   {marketplaces.length > 0 ? (
                     <Section
                       icon={<Square3Stack3DIcon className="size-5 text-foreground/60" />}
-                      title="Marketplaces"
-                      description="App stores with extensions and plugins for your workspace."
-                      count={`${marketplaces.length} marketplace${marketplaces.length === 1 ? "" : "s"}`}
+                      title={t("den.org_onboarding_marketplaces_title")}
+                      description={t("den.org_onboarding_marketplaces_desc")}
+                      count={
+                        marketplaces.length === 1
+                          ? t("den.org_onboarding_marketplace_count_one")
+                          : t("den.org_onboarding_marketplace_count_other", { value: marketplaces.length })
+                      }
                     >
                       {marketplaces.map((mp) => (
                         <MarketplaceCard key={mp.id} marketplace={mp} />
@@ -519,7 +527,7 @@ export function ResourceSelectionPage() {
             {selectedDefault ? (
               <div className="rounded-xl border border-green-6/30 bg-green-2/30 px-4 py-3 text-center text-sm text-green-11">
                 <Check size={14} className="mr-1 inline" />
-                {selectedDefault.label} will be set as your default model.
+                {t("den.org_onboarding_default_model_set", { model: selectedDefault.label })}
               </div>
             ) : null}
           </PageContent>
@@ -529,7 +537,7 @@ export function ResourceSelectionPage() {
           {/* Footer hint */}
           {!loading && hasResources ? (
             <p className="text-center text-xs text-muted-foreground text-balance leading-relaxed tracking-wide">
-              Providers are added to your workspace automatically. Marketplaces are available from Cloud settings.
+              {t("den.org_onboarding_footer_hint")}
             </p>
           ) : null}
           <Button
@@ -539,7 +547,7 @@ export function ResourceSelectionPage() {
             onClick={handleContinue}
             disabled={loading}
           >
-            {hasResources ? "Continue to workspace" : "Continue"}
+            {hasResources ? t("den.org_onboarding_continue_workspace") : t("common.next")}
             <ArrowRight data-icon="inline-end" />
           </Button>
         </PageFooter>
@@ -563,8 +571,10 @@ function MarketplaceCard({ marketplace }: MarketplaceCardProps) {
           </div>
         ) : null}
       </div>
-        <span className="shrink-0 text-xs text-muted-foreground">
-        {marketplace.pluginCount} plugin{marketplace.pluginCount === 1 ? "" : "s"}
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {marketplace.pluginCount === 1
+          ? t("den.org_onboarding_plugin_count_one")
+          : t("den.org_onboarding_plugin_count_other", { value: marketplace.pluginCount })}
       </span>
     </div>
   );
@@ -658,8 +668,8 @@ function ProviderCard({ provider, selectedDefault, onSelectDefault }: ProviderCa
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
             {provider.models.length === 1
-              ? "1 model"
-              : `${provider.models.length} models`}
+              ? t("den.org_onboarding_model_count_one")
+              : t("den.org_onboarding_model_count_other", { value: provider.models.length })}
           </div>
         </div>
         {firstModel ? (
@@ -673,7 +683,7 @@ function ProviderCard({ provider, selectedDefault, onSelectDefault }: ProviderCa
             )}
             onClick={handleUseAsDefault}
           >
-            {isSelected ? "Default" : "Use as default"}
+            {isSelected ? t("den.org_onboarding_default_badge") : t("den.org_onboarding_use_as_default")}
           </button>
         ) : (
           <Check size={16} className="shrink-0 text-green-11" />
@@ -691,7 +701,7 @@ function ProviderCard({ provider, selectedDefault, onSelectDefault }: ProviderCa
           ))}
           {provider.models.length > 5 ? (
             <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs text-muted-foreground">
-              +{provider.models.length - 5} more
+              {t("den.org_onboarding_more_models", { value: provider.models.length - 5 })}
             </span>
           ) : null}
         </div>
@@ -740,17 +750,17 @@ function OrganizationSelectionPage({
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover">
             <BuildingOffice2Icon className="size-7 text-foreground" />
           </div>
-          <PageTitle>Choose your organization</PageTitle>
+          <PageTitle>{t("den.org_onboarding_choose_title")}</PageTitle>
           {error ? (
             <Alert variant="destructive">
               <CircleAlert />
               <AlertDescription>
-                {error instanceof Error ? error.message : "Unable to select organization."}
+                {error instanceof Error ? error.message : t("den.org_onboarding_select_error")}
               </AlertDescription>
             </Alert>
           ) : (
             <PageDescription>
-              Select the organization whose cloud resources should be connected to this workspace.
+              {t("den.org_onboarding_select_desc")}
             </PageDescription>
           )}
         </PageHeader>
@@ -771,7 +781,7 @@ function OrganizationSelectionPage({
             onClick={() => mutate(selected)}
             disabled={isPending}
           >
-            {isPending ? "Connecting..." : "Continue with organization"}
+            {isPending ? t("den.org_onboarding_connecting") : t("den.org_onboarding_continue_org")}
             <ArrowRight data-icon="inline-end" />
           </Button>
         </PageFooter>
@@ -794,8 +804,8 @@ export function OrganizationList({ orgs, value, onValueChange }: OrganizationLis
     <div className="flex flex-col gap-3">
       {orgs.length > 10 ? (
         <Input
-          aria-label="Search organizations"
-          placeholder="Search organizations..."
+          aria-label={t("den.org_onboarding_search_label")}
+          placeholder={t("den.org_onboarding_search_placeholder")}
           value={query}
           onChange={(event) => updateQuery(event.target.value)}
         />
@@ -807,7 +817,7 @@ export function OrganizationList({ orgs, value, onValueChange }: OrganizationLis
           const nextOrg = orgs.find((org) => org.id === nextOrgId);
           if (nextOrg) onValueChange(nextOrg);
         }}
-        aria-label="Organizations"
+        aria-label={t("den.org_onboarding_organizations_label")}
       >
         {visible.map((org) => {
           const fieldId = `organization-${org.id}`;
@@ -843,17 +853,20 @@ export function OrganizationList({ orgs, value, onValueChange }: OrganizationLis
 
       {filtered.length === 0 && query.trim() ? (
         <div className="text-sm text-muted-foreground">
-          No organizations match your search.
+          {t("den.org_onboarding_no_matches")}
         </div>
       ) : null}
 
       {hasMore ? (
         <div className="flex flex-col items-start gap-2">
           <Button type="button" variant="outline" size="sm" onClick={showMore}>
-            Show more
+            {t("den.org_onboarding_show_more")}
           </Button>
           <div className="text-xs text-muted-foreground">
-            Showing {visible.length} of {filtered.length} organizations
+            {t("den.org_onboarding_showing_count", {
+              visible: visible.length,
+              total: filtered.length,
+            })}
           </div>
         </div>
       ) : null}

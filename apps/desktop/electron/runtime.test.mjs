@@ -9,6 +9,7 @@ import {
   commandMatchesPackagedSidecar,
   embeddedServerImportUrl,
   prioritizeWorkspacePaths,
+  resolveBundledAgentCommandEnv,
   resolveOpenworkServerConfigPath,
   seedWorkspacePathsForEmbeddedServer,
   selectStickyOpenworkPortWorkspace,
@@ -82,6 +83,61 @@ describe("commandMatchesPackagedSidecar", () => {
       false,
     );
   });
+
+  it("matches packaged agent runtime sidecars", () => {
+    const sidecars = ["/Applications/OpenWork.app/Contents/Resources/sidecars"];
+    assert.equal(
+      commandMatchesPackagedSidecar(
+        "/Applications/OpenWork.app/Contents/Resources/sidecars/codex-aarch64-apple-darwin app-server",
+        sidecars,
+      ),
+      true,
+    );
+    assert.equal(
+      commandMatchesPackagedSidecar(
+        "/Applications/OpenWork.app/Contents/Resources/sidecars/grok-aarch64-apple-darwin agent stdio",
+        sidecars,
+      ),
+      true,
+    );
+  });
+});
+
+describe("resolveBundledAgentCommandEnv", () => {
+  it("points agent commands at bundled sidecars", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "openwork-agent-sidecars-"));
+    try {
+      const ext = process.platform === "win32" ? ".exe" : "";
+      const codexPath = path.join(dir, `codex${ext}`);
+      const grokPath = path.join(dir, `grok${ext}`);
+      await writeFile(codexPath, "");
+      await writeFile(grokPath, "");
+
+      assert.deepEqual(resolveBundledAgentCommandEnv([dir], {}), {
+        OPENONE_CODEX_COMMAND: codexPath,
+        OPENONE_GROK_COMMAND: grokPath,
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps explicit agent command overrides", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "openwork-agent-sidecars-"));
+    try {
+      const ext = process.platform === "win32" ? ".exe" : "";
+      await writeFile(path.join(dir, `codex${ext}`), "");
+      await writeFile(path.join(dir, `grok${ext}`), "");
+
+      assert.deepEqual(resolveBundledAgentCommandEnv([dir], {
+        OPENONE_CODEX_COMMAND: "/custom/codex",
+      }), {
+        OPENONE_GROK_COMMAND: path.join(dir, `grok${ext}`),
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("embeddedServerImportUrl", () => {
@@ -129,9 +185,10 @@ describe("embeddedServerImportUrl", () => {
 
 describe("resolveOpenworkServerConfigPath", () => {
   it("respects explicit server config path", () => {
+    const explicitPath = path.resolve("/tmp/openwork/server.json");
     assert.equal(
-      resolveOpenworkServerConfigPath({ OPENWORK_SERVER_CONFIG: "/tmp/openwork/server.json" }),
-      "/tmp/openwork/server.json",
+      resolveOpenworkServerConfigPath({ OPENWORK_SERVER_CONFIG: explicitPath }),
+      explicitPath,
     );
   });
 

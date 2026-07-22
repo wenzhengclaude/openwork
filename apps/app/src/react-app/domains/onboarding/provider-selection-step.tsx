@@ -30,7 +30,7 @@ export function ProviderSelectionStep({
         <PageHeader className="mb-8 text-center">
           <PageTitle>Power your first task</PageTitle>
           <PageDescription>
-            Connect a model, then try a real task in chat so you can see OpenWork work.
+            Connect a model, then try a real task in chat so you can see Open One work.
           </PageDescription>
         </PageHeader>
 

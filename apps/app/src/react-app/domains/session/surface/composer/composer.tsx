@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { AppWindowMac, ArrowUp, Braces, Check, ChevronDown, ChevronRight, FileText, Gauge, GitBranch, Hammer, Hand, ListPlus, Paperclip, Plug, Plus, Settings, ShieldAlert, ShieldCheck, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
+import { AppWindowMac, ArrowUp, Braces, Check, ChevronDown, ChevronRight, FileText, Gauge, GitBranch, Hammer, Hand, ListPlus, Package, Paperclip, Plug, Plus, Settings, ShieldAlert, ShieldCheck, SlidersHorizontal, Square, Terminal, X, Zap } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { toast } from "@/components/ui/sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuShortcut, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -126,7 +126,7 @@ const RUN_MODE_ITEMS: Array<{ value: ComposerRunMode; label: string; shortLabel:
   {
     value: "opencode",
     label: "默认模式",
-    shortLabel: "默认",
+    shortLabel: "默认模式",
     description: "使用 Open One 当前标准工作流。",
   },
   {
@@ -205,6 +205,7 @@ function ContextWindowIndicator({
       <TooltipTrigger
         render={
           <span
+            data-testid="composer-context-window-indicator"
             tabIndex={0}
             role="img"
             aria-label={`上下文窗口 ${percent}% 已用`}
@@ -215,7 +216,7 @@ function ContextWindowIndicator({
           </span>
         }
       />
-      <TooltipContent className="max-w-56 space-y-1 px-3 py-2 text-left">
+      <TooltipContent data-testid="composer-context-window-tooltip" className="max-w-56 space-y-1 px-3 py-2 text-left">
         <p className="font-medium">上下文窗口</p>
         <p>{percent}% 已用（剩余 {remaining}%）</p>
         <p>已用 {formatContextTokens(usage)} 标记，共 {formatContextTokens(contextWindow)}</p>
@@ -240,6 +241,10 @@ function ApprovalModeIcon({ mode, className }: { mode: OpenworkAgentApprovalMode
   if (mode === "full-access") return <ShieldAlert size={14} className={className} />;
   if (mode === "custom") return <SlidersHorizontal size={14} className={className} />;
   return <ShieldCheck size={14} className={className} />;
+}
+
+function SkillIcon({ className }: { className?: string }) {
+  return <Package size={14} className={className} />;
 }
 
 function runModeLabel(mode: ComposerRunMode) {
@@ -393,14 +398,25 @@ function formatPluginObjectType(type: string) {
 function pluginSlashCommandName(file: CloudImportedPluginFile) {
   const path = file.path.trim();
   if (file.objectType === "command") {
-    const command = path.match(/^\.opencode\/(?:command|commands)\/(.+)\.md$/i)?.[1];
+    const command = path.match(/^\.opencode\/(?:command|commands)\/(.+)\.md$/i)?.[1]
+      ?? path.match(/^\.opencode\/plugins\/[^/]+\/commands\/(.+)\.md$/i)?.[1];
     return command?.trim() || null;
   }
   if (file.objectType === "skill") {
-    const skill = path.match(/^\.opencode\/(?:skill|skills)\/(?:[^/]+\/)?([^/]+)\/SKILL\.md$/i)?.[1];
+    const skill = path.match(/^\.opencode\/(?:skill|skills)\/(?:[^/]+\/)?([^/]+)\/SKILL\.md$/i)?.[1]
+      ?? path.match(/^\.opencode\/plugins\/[^/]+\/skills\/([^/]+)\/SKILL\.md$/i)?.[1];
     return skill?.trim() || null;
   }
   return null;
+}
+
+function skillToSlashOption(skill: SkillCard): SlashCommandOption {
+  return {
+    id: `skill:${skill.name}`,
+    name: skill.name,
+    description: skill.description || skill.trigger,
+    source: "skill",
+  };
 }
 
 export function ReactSessionComposer(props: ComposerProps) {
@@ -430,6 +446,9 @@ export function ReactSessionComposer(props: ComposerProps) {
   const commandsCacheRef = useRef<SlashCommandOption[] | null>(null);
   const commandsRequestRef = useRef<Promise<SlashCommandOption[]> | null>(null);
   const commandsLoadVersionRef = useRef(0);
+  const skillsCacheRef = useRef<SkillCard[] | null>(null);
+  const skillsRequestRef = useRef<Promise<SkillCard[]> | null>(null);
+  const skillsLoadVersionRef = useRef(0);
   const listCommandsRef = useRef(props.listCommands);
   const listSkillsRef = useRef(props.listSkills);
   const listMcpRef = useRef(props.listMcp);
@@ -442,7 +461,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     plugins: false,
   });
   const [commandsLoaded, setCommandsLoaded] = useState(false);
-  const [skillsLoaded, setSkillsLoaded] = useState(Boolean(props.skills));
+  const [skillsLoaded, setSkillsLoaded] = useState((props.skills?.length ?? 0) > 0);
   const [mcpLoaded, setMcpLoaded] = useState(Boolean(props.mcpServers));
   const [pluginsLoaded, setPluginsLoaded] = useState(Boolean(props.importedPlugins));
   const [, setExtensionStateVersion] = useState(0);
@@ -563,6 +582,10 @@ export function ReactSessionComposer(props: ComposerProps) {
 
   useEffect(() => {
     setSkills(props.skills ?? []);
+    if ((props.skills?.length ?? 0) > 0) {
+      skillsCacheRef.current = props.skills ?? null;
+      setSkillsLoaded(true);
+    }
   }, [props.skills]);
 
   useEffect(() => {
@@ -581,6 +604,9 @@ export function ReactSessionComposer(props: ComposerProps) {
 
   useEffect(() => {
     listSkillsRef.current = props.listSkills;
+    skillsLoadVersionRef.current += 1;
+    skillsCacheRef.current = null;
+    skillsRequestRef.current = null;
   }, [props.listSkills]);
 
   useEffect(() => {
@@ -628,6 +654,30 @@ export function ReactSessionComposer(props: ComposerProps) {
     return request;
   }, []);
 
+  const loadSkills = useCallback(() => {
+    const listSkills = listSkillsRef.current;
+    if (!listSkills) return Promise.resolve([]);
+    if (skillsCacheRef.current !== null) {
+      return Promise.resolve(skillsCacheRef.current);
+    }
+    if (skillsRequestRef.current) {
+      return skillsRequestRef.current;
+    }
+    const version = skillsLoadVersionRef.current;
+    const request = listSkills().then((next) => {
+      if (skillsLoadVersionRef.current === version) {
+        skillsCacheRef.current = next;
+      }
+      return next;
+    }).finally(() => {
+      if (skillsLoadVersionRef.current === version) {
+        skillsRequestRef.current = null;
+      }
+    });
+    skillsRequestRef.current = request;
+    return request;
+  }, []);
+
   useEffect(() => {
     const refresh = () => setExtensionStateVersion((value) => value + 1);
     window.addEventListener(OPENWORK_EXTENSION_STATE_CHANGED, refresh);
@@ -648,7 +698,7 @@ export function ReactSessionComposer(props: ComposerProps) {
       plugins: false,
     };
     setCommandsLoaded(false);
-    setSkillsLoaded(Boolean(props.skills));
+    setSkillsLoaded((props.skills?.length ?? 0) > 0);
     setMcpLoaded(Boolean(props.mcpServers));
     setPluginsLoaded(Boolean(props.importedPlugins));
   }, [toolMenuOpen]);
@@ -713,6 +763,31 @@ export function ReactSessionComposer(props: ComposerProps) {
       cancelled = true;
     };
   }, [mentionOpen, mentionQuery, props.listAgents, props.recentFiles, props.searchFiles]);
+
+  useEffect(() => {
+    if (!slashOpen || !listSkillsRef.current) return;
+    let cancelled = false;
+    setSkillsLoading(true);
+    void loadSkills()
+      .then((next) => {
+        if (!cancelled) {
+          setSkills(next);
+          setSkillsLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSkills([]);
+          setSkillsLoaded(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSkillsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [slashOpen, loadSkills]);
 
   useEffect(() => {
     if (!toolMenuOpen) return;
@@ -804,13 +879,12 @@ export function ReactSessionComposer(props: ComposerProps) {
   useEffect(() => {
     if (!toolMenuOpen) return;
     const openId = toolMenuLoadRef.current.openId;
-    const listSkills = listSkillsRef.current;
     const listMcp = listMcpRef.current;
-    if (toolMenuSection === "skills" && listSkills && !toolMenuLoadRef.current.skills) {
+    if (toolMenuSection === "skills" && listSkillsRef.current && !toolMenuLoadRef.current.skills) {
       let cancelled = false;
       toolMenuLoadRef.current.skills = true;
       setSkillsLoading(true);
-      void listSkills()
+      void loadSkills()
         .then((next) => {
           if (!cancelled && toolMenuLoadRef.current.openId === openId) {
             setSkills(next);
@@ -856,13 +930,24 @@ export function ReactSessionComposer(props: ComposerProps) {
       };
     }
     return undefined;
-  }, [toolMenuOpen, toolMenuSection]);
+  }, [toolMenuOpen, toolMenuSection, loadSkills]);
+
+  const slashItems = useMemo(() => {
+    const items = commands.slice();
+    const names = new Set(items.map((command) => command.name));
+    for (const skill of skills) {
+      if (names.has(skill.name)) continue;
+      names.add(skill.name);
+      items.push(skillToSlashOption(skill));
+    }
+    return items;
+  }, [commands, skills]);
 
   const slashFiltered = useMemo(() => {
     if (!slashOpen) return [];
-    if (!slashQuery) return commands.slice(0, 8);
-    return fuzzysort.go(slashQuery, commands, { keys: ["name", "description"], limit: 8 }).map((entry) => entry.obj);
-  }, [commands, slashOpen, slashQuery]);
+    if (!slashQuery) return slashItems.slice(0, 8);
+    return fuzzysort.go(slashQuery, slashItems, { keys: ["name", "description"] }).map((entry) => entry.obj);
+  }, [slashItems, slashOpen, slashQuery]);
   const mentionFiltered = useMemo(() => {
     if (!mentionOpen) return [];
     if (!mentionQuery) return mentionItems.slice(0, 8);
@@ -1219,7 +1304,13 @@ export function ReactSessionComposer(props: ComposerProps) {
                       if (event.detail === 0) applyCommandSelection(command, { replaceSkillDraft: true });
                     }}
                   >
-                    <Terminal size={14} className="mt-0.5 shrink-0 text-gray-9" />
+                    {command.source === "skill" ? (
+                      <SkillIcon className="mt-0.5 shrink-0 text-gray-9" />
+                    ) : command.source === "mcp" ? (
+                      <Plug size={14} className="mt-0.5 shrink-0 text-gray-9" />
+                    ) : (
+                      <Terminal size={14} className="mt-0.5 shrink-0 text-gray-9" />
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-3">
                         <div className="truncate text-xs font-semibold">/{command.name}</div>
@@ -1236,7 +1327,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               </div>
             ) : (
               <div className="px-3 py-2 text-xs text-gray-10">
-                {!commandsLoaded && commandsLoading ? t("composer.loading_commands") : t("composer.no_commands")}
+                {(!commandsLoaded && commandsLoading) || (!skillsLoaded && skillsLoading) ? t("composer.loading_commands") : t("composer.no_commands")}
               </div>
             )}
           </div>
@@ -1296,10 +1387,12 @@ export function ReactSessionComposer(props: ComposerProps) {
     );
   };
 
+  const composerOverlayOpen = toolMenuOpen || runModeMenuOpen || approvalModeMenuOpen || agentMenuOpen || slashOpen || mentionOpen;
+
   return (
     <div
       ref={rootRef}
-      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-gradient-to-t from-dls-surface via-dls-surface/95 to-transparent px-4 pb-2 md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-1"}`}
+      className={`sticky bottom-0 ${composerOverlayOpen ? "z-50" : "z-20"} bg-gradient-to-t from-dls-surface via-dls-surface/95 to-transparent px-4 pb-2 md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-1"}`}
       style={{ contain: "layout style" }}
       onKeyDownCapture={handleKeyDownCapture}
       onCompositionStart={() => {
@@ -1455,8 +1548,8 @@ export function ReactSessionComposer(props: ComposerProps) {
             />
 
             {/* Action row — attachments, quick actions, model controls, and send */}
-            <div className="mt-2 flex min-w-0 items-center gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+            <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1.5 overflow-visible">
                 <input
                   ref={(element) => {
                     fileInput = element ?? undefined;
@@ -1496,7 +1589,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     <Plus size={22} strokeWidth={1.7} />
                   </button>
                   {toolMenuOpen ? (
-                    <div className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-[22px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                    <div data-testid="composer-tool-menu" className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-[22px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                       <div className="grid grid-cols-[152px_minmax(0,1fr)] sm:grid-cols-[176px_minmax(0,1fr)]">
                         <div className="border-r border-dls-border bg-gray-2/30 p-2">
                           <button
@@ -1627,7 +1720,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                     className="flex w-full items-start gap-3 rounded-[16px] px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyCommandSelection(command)}
                                   >
-                                    <Zap size={14} className="mt-0.5 shrink-0 text-gray-9" />
+                                    <SkillIcon className="mt-0.5 shrink-0 text-gray-9" />
                                     <div className="min-w-0">
                                       <div className="truncate text-xs font-semibold text-gray-11">/{command.name}</div>
                                       {command.description ? <div className="truncate text-xs text-gray-10">{command.description}</div> : null}
@@ -1741,13 +1834,14 @@ export function ReactSessionComposer(props: ComposerProps) {
                     disabled={props.busy}
                     aria-expanded={runModeMenuOpen}
                     title="运行模式"
+                    data-testid="composer-run-mode-button"
                   >
                     <RunModeIcon mode={props.runMode} className="text-gray-10" />
                     <span className="max-w-[92px] truncate">{runModeLabel(props.runMode)}</span>
                     <ChevronDown size={13} />
                   </button>
                   {runModeMenuOpen ? (
-                    <div className="absolute left-0 bottom-full z-40 mb-2 w-72 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                    <div data-testid="composer-run-mode-menu" className="absolute left-0 bottom-full z-40 mb-2 w-72 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                       <div className="border-b border-dls-border px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-10">
                         运行模式
                       </div>
@@ -1798,13 +1892,14 @@ export function ReactSessionComposer(props: ComposerProps) {
                     disabled={props.busy}
                     aria-expanded={approvalModeMenuOpen}
                     title={approvalModeApplies ? "审批模式" : "审批模式用于 Codex、Grok Build 和多智能体"}
+                    data-testid="composer-approval-mode-button"
                   >
                     <ApprovalModeIcon mode={props.approvalMode} className={approvalModeApplies ? "text-gray-10" : "text-gray-8"} />
                     <span className="max-w-[88px] truncate">{approvalModeLabel(props.approvalMode)}</span>
                     <ChevronDown size={13} />
                   </button>
                   {approvalModeMenuOpen ? (
-                    <div className="absolute left-0 bottom-full z-40 mb-2 w-80 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                    <div data-testid="composer-approval-mode-menu" className="absolute left-0 bottom-full z-40 mb-2 w-80 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                       <div className="border-b border-dls-border px-3 pb-2 pt-2">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-10">审批模式</div>
                         {!approvalModeApplies ? (
@@ -1861,12 +1956,13 @@ export function ReactSessionComposer(props: ComposerProps) {
                     disabled={props.busy}
                     aria-expanded={agentMenuOpen}
                     title={t("composer.agent_label")}
+                    data-testid="composer-agent-button"
                   >
                     <span className="max-w-[140px] truncate">{props.agentLabel}</span>
                     <ChevronDown size={13} />
                   </button>
                   {agentMenuOpen ? (
-                    <div className="absolute left-0 bottom-full z-40 mb-2 w-64 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                    <div data-testid="composer-agent-menu" className="absolute left-0 bottom-full z-40 mb-2 w-64 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
                       <div className="border-b border-dls-border px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-10">
                         {t("composer.agent_label")}
                       </div>
@@ -1920,7 +2016,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   contextWindow={props.modelContextWindow}
                   usageTokens={props.contextUsageTokens}
                 />
-                <div className="ml-auto flex h-9 min-w-0 max-w-[min(20rem,46vw)] shrink items-center rounded-full bg-gray-3 pr-1">
+                <div className="ml-auto flex h-9 min-w-0 max-w-full shrink items-center overflow-hidden rounded-full bg-gray-3 pr-1">
                   <ModelSelect
                     open={props.modelPickerOpen}
                     value={props.selectedModel}
@@ -1953,7 +2049,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   on the chevron shows how many messages are queued.
                   Escape arms a "Hit Escape again to stop the agent" prompt.
               */}
-              <div className="flex shrink-0 items-end gap-1.5">
+              <div className="flex shrink-0 items-end gap-1.5 justify-self-end">
                 {props.busy ? (
                   <>
                     {escapeArmed ? (
@@ -1970,20 +2066,20 @@ export function ReactSessionComposer(props: ComposerProps) {
                       <Square size={12} fill="currentColor" />
                       <span className="hidden sm:inline">{t("composer.stop")}</span>
                     </button>
-                    <div className="flex items-end">
+                    <div className="flex items-end overflow-hidden rounded-full border border-dls-border bg-dls-surface shadow-sm">
                       <button
                         type="button"
                         onClick={canSend ? props.onSteer : undefined}
                         disabled={!canSend}
-                        className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-l-full pl-4 pr-3 text-[13px] font-medium transition-colors ${
+                        className={`inline-flex size-9 items-center justify-center transition-colors ${
                           canSend
-                            ? "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
-                            : "bg-gray-4 text-gray-10"
+                            ? "text-dls-text hover:bg-dls-hover"
+                            : "text-gray-9"
                         }`}
                         title={t("composer.steer_hint")}
                       >
-                        <Zap size={14} />
-                        <span>{t("composer.steer")}</span>
+                        <ArrowUp size={17} strokeWidth={2} />
+                        <span className="sr-only">{t("composer.steer")}</span>
                       </button>
                       <DropdownMenu>
                         <DropdownMenuTrigger
@@ -1991,10 +2087,10 @@ export function ReactSessionComposer(props: ComposerProps) {
                             <button
                               type="button"
                               aria-label={t("composer.send_options")}
-                              className={`relative inline-flex h-9 max-h-9 items-center rounded-r-full border-l pl-1.5 pr-2.5 transition-colors ${
+                              className={`relative inline-flex h-9 w-8 items-center justify-center border-l border-dls-border transition-colors ${
                                 canSend
-                                  ? "border-[color-mix(in_srgb,var(--dls-accent-fg)_25%,transparent)] bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
-                                  : "border-gray-6 bg-gray-4 text-gray-10"
+                                  ? "text-dls-secondary hover:bg-dls-hover hover:text-dls-text"
+                                  : "text-gray-9"
                               }`}
                             >
                               <ChevronDown size={14} />

@@ -50,8 +50,41 @@ const pty = require(["node", "pty"].join("-"));
 const NATIVE_DEEP_LINK_EVENT = "openwork:deep-link-native";
 const TAURI_APP_IDENTIFIER = "com.differentai.openwork";
 const DEV_APP_IDENTIFIER = "com.differentai.openwork.dev";
-const DESKTOP_PROTOCOL_SCHEME = "openwork";
-const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
+
+installBrokenPipeGuard(process.stdout);
+installBrokenPipeGuard(process.stderr);
+
+function installBrokenPipeGuard(stream) {
+  stream.on("error", (error) => {
+    if (isBrokenPipeError(error)) return;
+    throw error;
+  });
+  const write = stream.write.bind(stream);
+  stream.write = (...args) => {
+    try {
+      return write(...args);
+    } catch (error) {
+      if (isBrokenPipeError(error)) return false;
+      throw error;
+    }
+  };
+}
+
+function isBrokenPipeError(error) {
+  return error && typeof error === "object" && "code" in error && error.code === "EPIPE";
+}
+
+function hasOpenOneDevProtocolArg(argv) {
+  return argv.some((entry) => {
+    if (typeof entry !== "string") return false;
+    return entry.trim().toLowerCase().startsWith("openone-dev://");
+  });
+}
+
+const isDevMode =
+  process.env.OPENWORK_DEV_MODE === "1" ||
+  hasOpenOneDevProtocolArg(process.argv);
+const DESKTOP_PROTOCOL_SCHEME = isDevMode ? "openone-dev" : "openone";
 const APP_NAME =
   process.env.OPENWORK_ELECTRON_APP_NAME?.trim() ||
   (isDevMode ? "Open One - Dev" : "Open One");
@@ -110,6 +143,18 @@ function killTerminalsForWebContents(webContentsId) {
   }
 }
 
+function removeLegacyWindowsProtocolRegistration(scheme) {
+  if (process.platform !== "win32") return;
+  try {
+    execFileSync("reg.exe", ["delete", `HKCU\\Software\\Classes\\${scheme}`, "/f"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+  } catch {
+    // Missing legacy registration is fine.
+  }
+}
+
 // Production Electron shares the same on-disk state folder as the Tauri shell
 // so in-place migration is a no-op for almost every file. Dev mode uses the
 // separate dev identifier so it can run beside the production app.
@@ -118,8 +163,16 @@ function killTerminalsForWebContents(webContentsId) {
 // Electron install from the real Tauri app.
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_IDENTIFIER);
+for (const legacyScheme of ["openwork", "openwork-dev"]) {
+  app.removeAsDefaultProtocolClient(legacyScheme);
+  removeLegacyWindowsProtocolRegistration(legacyScheme);
+}
 if (app.isPackaged) {
   app.setAsDefaultProtocolClient(DESKTOP_PROTOCOL_SCHEME);
+} else if (isDevMode) {
+  app.setAsDefaultProtocolClient(DESKTOP_PROTOCOL_SCHEME, process.execPath, [
+    path.resolve(process.argv[1] ?? path.join(__dirname, "main.mjs")),
+  ]);
 }
 const userDataOverride = process.env.OPENWORK_ELECTRON_USERDATA?.trim();
 if (userDataOverride) {
@@ -912,8 +965,8 @@ function forwardedDeepLinks(argv) {
     .map((entry) => entry.trim())
     .filter(
       (entry) =>
-        entry.startsWith("openwork://") ||
-        entry.startsWith("openwork-dev://") ||
+        entry.startsWith("openone://") ||
+        entry.startsWith("openone-dev://") ||
         entry.startsWith("https://") ||
         entry.startsWith("http://"),
     );
@@ -1542,7 +1595,7 @@ const desktopCommandHandlers = {
         version: app.getVersion(),
         gitSha: process.env.OPENWORK_GIT_SHA ?? null,
         buildEpoch: process.env.OPENWORK_BUILD_EPOCH ?? null,
-        openworkDevMode: process.env.OPENWORK_DEV_MODE === "1",
+        openworkDevMode: isDevMode,
       };
   },
   "desktopNotificationShow": async (event, ...args) => {
@@ -1557,7 +1610,7 @@ const desktopCommandHandlers = {
       }
   },
   "getOpenworkUiMcpCommand": async (event, ...args) => {
-      if (process.env.OPENWORK_DEV_MODE === "1") {
+      if (isDevMode) {
         return ["node", path.resolve(__dirname, "../../..", "packages/openwork-ui-mcp/index.mjs")];
       }
       return ["npx", "-y", "openwork-ui-mcp"];

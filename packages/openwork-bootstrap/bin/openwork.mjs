@@ -608,7 +608,7 @@ async function createDesktopHandoff(baseUrl, auth) {
   const handoff = await request(baseUrl, "/v1/auth/desktop-handoff", {
     method: "POST",
     headers: auth,
-    body: JSON.stringify({ desktopScheme: "openwork" }),
+    body: JSON.stringify({ desktopScheme: "openone" }),
   })
   if (handoff.status !== 200 || !handoff.body?.grant) {
     throw new Error(`desktop_handoff_failed: ${handoff.status} ${JSON.stringify(handoff.body)}`)

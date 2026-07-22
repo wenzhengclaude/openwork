@@ -14,11 +14,12 @@ import {
   unlinkSync,
   writeFileSync,
 } from "fs";
-import { dirname, join, resolve } from "path";
+import { basename, dirname, join, resolve } from "path";
 import { tmpdir } from "os";
 import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(__dirname, "..", "..", "..");
 const readArg = (name) => {
   const raw = process.argv.slice(2);
   const direct = raw.find((arg) => arg.startsWith(`${name}=`));
@@ -33,6 +34,9 @@ const forceBuild = hasFlag("--force") || process.env.OPENWORK_SIDECAR_FORCE_BUIL
 const sidecarOverride = process.env.OPENWORK_SIDECAR_DIR?.trim() || readArg("--outdir");
 const sidecarDir = sidecarOverride ? resolve(sidecarOverride) : join(__dirname, "..", "resources", "sidecars");
 const constantsPath = resolve(__dirname, "..", "..", "..", "constants.json");
+const agentSidecarsOptional = process.env.OPENONE_AGENT_SIDECARS_OPTIONAL === "1";
+const agentSidecarsSkipBuild = process.env.OPENONE_AGENT_SIDECARS_SKIP_BUILD === "1";
+const agentSidecarsForceBuild = process.env.OPENONE_AGENT_SIDECAR_FORCE_BUILD === "1";
 
 const opencodeGithubRepo = (() => {
   const raw =
@@ -158,6 +162,50 @@ const orchestratorTargetName = orchestratorTargetTriple
 const orchestratorTargetPath = orchestratorTargetName ? join(sidecarDir, orchestratorTargetName) : null;
 const orchestratorDir = resolve(__dirname, "..", "..", "orchestrator");
 
+const agentSidecarSpecs = [
+  {
+    key: "codex",
+    displayName: "Codex",
+    baseName: "codex",
+    envBinary: "OPENONE_CODEX_BINARY",
+    vendorDir: resolve(repoRoot, "vendor", "agents", "codex-official", "codex-rs"),
+    cargoPackage: "codex-cli",
+    sourceBaseNames: ["codex"],
+    localDirs: [
+      resolve(repoRoot, "vendor", "agents", "bin"),
+      resolve(process.env.USERPROFILE ?? process.env.HOME ?? "", ".codex", "plugins", ".plugin-appserver"),
+      resolve(process.env.USERPROFILE ?? process.env.HOME ?? "", ".codex", ".sandbox-bin"),
+    ],
+  },
+  {
+    key: "grok",
+    displayName: "Grok Build",
+    baseName: "grok",
+    envBinary: "OPENONE_GROK_BINARY",
+    vendorDir: resolve(repoRoot, "vendor", "agents", "grok-build"),
+    cargoPackage: "xai-grok-pager-bin",
+    sourceBaseNames: ["grok", "xai-grok-pager"],
+    localDirs: [
+      resolve(repoRoot, "vendor", "agents", "bin"),
+      resolve(process.env.USERPROFILE ?? process.env.HOME ?? "", ".grok", "bin"),
+      resolve(process.env.USERPROFILE ?? process.env.HOME ?? "", ".cargo", "bin"),
+    ],
+  },
+];
+
+const proxyEnv = () => {
+  const httpsProxy = process.env.HTTPS_PROXY?.trim() || process.env.https_proxy?.trim();
+  const fallbackProxy = process.env.HTTP_PROXY?.trim() || process.env.http_proxy?.trim();
+  const proxy = httpsProxy || fallbackProxy;
+  if (!proxy) return {};
+  return {
+    HTTPS_PROXY: httpsProxy || proxy,
+    https_proxy: httpsProxy || proxy,
+    HTTP_PROXY: process.env.HTTP_PROXY?.trim() || process.env.http_proxy?.trim() || proxy,
+    http_proxy: process.env.http_proxy?.trim() || process.env.HTTP_PROXY?.trim() || proxy,
+  };
+};
+
 const readHeader = (filePath, length = 256) => {
   const fd = openSync(filePath, "r");
   try {
@@ -227,6 +275,253 @@ const sha256File = (filePath) => {
   const hash = createHash("sha256");
   hash.update(readFileSync(filePath));
   return hash.digest("hex");
+};
+
+const executableName = (baseName) => `${baseName}${isWindowsTarget ? ".exe" : ""}`;
+
+const agentTargetName = (baseName) =>
+  resolvedTargetTriple
+    ? `${baseName}-${resolvedTargetTriple}${isWindowsTarget ? ".exe" : ""}`
+    : executableName(baseName);
+
+const agentCargoTargetDir = (spec) => {
+  const explicit = process.env[`OPENONE_${spec.key.toUpperCase()}_CARGO_TARGET_DIR`]?.trim();
+  if (explicit) return resolve(explicit);
+
+  const globalTargetDir = process.env.CARGO_TARGET_DIR?.trim();
+  if (globalTargetDir) return resolve(globalTargetDir);
+
+  if (spec.key === "codex" && process.platform === "win32") {
+    return resolve(tmpdir(), "openone-agent-sidecars", "codex-target");
+  }
+
+  return null;
+};
+
+const agentReleaseDirs = (spec) => {
+  const cargoTargetDir = agentCargoTargetDir(spec);
+  return [
+    cargoTargetDir && resolvedTargetTriple ? resolve(cargoTargetDir, resolvedTargetTriple, "release") : null,
+    cargoTargetDir ? resolve(cargoTargetDir, "release") : null,
+    resolvedTargetTriple ? resolve(spec.vendorDir, "target", resolvedTargetTriple, "release") : null,
+    resolve(spec.vendorDir, "target", "release"),
+  ].filter(Boolean);
+};
+
+const pathDirs = () =>
+  String(process.env.PATH ?? process.env.Path ?? "")
+    .split(process.platform === "win32" ? ";" : ":")
+    .filter(Boolean);
+
+const localAgentCandidateDirs = (spec) => [
+  ...(spec.localDirs ?? []),
+  ...pathDirs(),
+];
+
+const findAgentBinary = (spec) => {
+  const override = process.env[spec.envBinary]?.trim();
+  if (override && existsSync(override) && !isStubBinary(override)) return override;
+
+  const releaseCandidates = agentReleaseDirs(spec).flatMap((releaseDir) =>
+    spec.sourceBaseNames.map((name) => join(releaseDir, executableName(name))),
+  );
+  const localCandidates = localAgentCandidateDirs(spec).flatMap((dir) =>
+    spec.sourceBaseNames.map((name) => join(dir, executableName(name))),
+  );
+  const candidates = [...releaseCandidates, ...localCandidates];
+  return candidates.find((candidate) => {
+    if (!existsSync(candidate) || isStubBinary(candidate)) return false;
+    return Boolean(readBinaryVersion(candidate));
+  }) ?? null;
+};
+
+const executableNames = (baseName) => (isWindowsTarget ? [`${baseName}.exe`, baseName] : [baseName]);
+
+const executableRuns = (filePath) => {
+  try {
+    const result = spawnSync(filePath, ["--version"], { encoding: "utf8", shell: false });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+};
+
+const findProtocExecutable = () => {
+  const override = process.env.PROTOC?.trim();
+  if (override && existsSync(override) && executableRuns(override)) return override;
+
+  const names = executableNames("protoc").map((name) => name.toLowerCase());
+  const directCandidates = pathDirs().flatMap((dir) => names.map((name) => join(dir, name)));
+  const directMatch = directCandidates.find((candidate) => existsSync(candidate) && executableRuns(candidate));
+  if (directMatch) return directMatch;
+
+  const wingetPackagesDir = process.env.LOCALAPPDATA
+    ? resolve(process.env.LOCALAPPDATA, "Microsoft", "WinGet", "Packages")
+    : null;
+  if (!wingetPackagesDir || !existsSync(wingetPackagesDir)) return null;
+
+  return readDirectory(wingetPackagesDir).find((filePath) => {
+    if (!names.includes(basename(filePath).toLowerCase())) return false;
+    return executableRuns(filePath);
+  }) ?? null;
+};
+
+const appendEnvFlags = (current, flags) =>
+  [current?.trim(), ...flags].filter(Boolean).join(" ");
+
+const cargoBuildEnv = (spec) => {
+  const env = {
+    ...process.env,
+    ...proxyEnv(),
+    CARGO_TERM_COLOR: process.env.CARGO_TERM_COLOR ?? "always",
+    CARGO_NET_GIT_FETCH_WITH_CLI: process.env.CARGO_NET_GIT_FETCH_WITH_CLI ?? "true",
+  };
+  const cargoTargetDir = agentCargoTargetDir(spec);
+  if (cargoTargetDir) {
+    env.CARGO_TARGET_DIR = cargoTargetDir;
+  }
+  const protoc = findProtocExecutable();
+  if (protoc && !env.PROTOC?.trim()) {
+    env.PROTOC = protoc;
+  }
+  if (spec.key === "grok" && process.platform === "win32") {
+    env.RUSTFLAGS = appendEnvFlags(env.RUSTFLAGS, [
+      "-C debuginfo=0",
+      "-C link-arg=/DEBUG:NONE",
+    ]);
+  }
+  return env;
+};
+
+const findVcvars64 = () => {
+  if (process.platform !== "win32") return null;
+  const roots = [
+    process.env.ProgramFiles ? resolve(process.env.ProgramFiles, "Microsoft Visual Studio") : null,
+    process.env["ProgramFiles(x86)"] ? resolve(process.env["ProgramFiles(x86)"], "Microsoft Visual Studio") : null,
+  ].filter(Boolean);
+  const candidates = [];
+  for (const root of roots) {
+    for (const year of ["2022", "2019", "2017"]) {
+      for (const edition of ["BuildTools", "Community", "Professional", "Enterprise"]) {
+        candidates.push(resolve(root, year, edition, "VC", "Auxiliary", "Build", "vcvars64.bat"));
+      }
+    }
+  }
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+};
+
+const runCargoBuild = (spec) => {
+  const args = ["build", "-p", spec.cargoPackage, "--release"];
+  const env = cargoBuildEnv(spec);
+  if (spec.key === "codex" && env.CARGO_TARGET_DIR) {
+    console.log(`Using Codex cargo target dir at ${env.CARGO_TARGET_DIR}.`);
+  }
+  if (spec.key === "grok" && env.PROTOC) {
+    console.log(`Using protoc at ${env.PROTOC}.`);
+  }
+  if (process.platform === "win32") {
+    const vcvars64 = findVcvars64();
+    if (vcvars64 && !process.env.Path?.toLowerCase().includes("\\vc\\tools\\msvc\\")) {
+      const scriptPath = join(tmpdir(), `openone-agent-sidecar-${spec.key}-${process.pid}.cmd`);
+      writeFileSync(scriptPath, `@echo off\r\ncall "${vcvars64}" >nul\r\ncargo ${args.join(" ")}\r\n`, "utf8");
+      try {
+        return spawnSync("cmd.exe", ["/d", "/c", scriptPath], {
+          cwd: spec.vendorDir,
+          stdio: "inherit",
+          env,
+        });
+      } finally {
+        try {
+          unlinkSync(scriptPath);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+  return spawnSync("cargo", args, {
+    cwd: spec.vendorDir,
+    stdio: "inherit",
+    shell: false,
+    env,
+  });
+};
+
+const buildAgentBinary = (spec) => {
+  if (agentSidecarsSkipBuild) return false;
+  if (!existsSync(spec.vendorDir)) return false;
+
+  console.log(`Building ${spec.displayName} sidecar from ${spec.vendorDir}...`);
+  const result = runCargoBuild(spec);
+  return result.status === 0;
+};
+
+const prepareAgentSidecar = (spec) => {
+  const aliasPath = join(sidecarDir, executableName(spec.baseName));
+  const targetPath = join(sidecarDir, agentTargetName(spec.baseName));
+  const override = process.env[spec.envBinary]?.trim();
+  const overridePath = override && existsSync(override) && !isStubBinary(override) ? override : null;
+  const existingPath = existsSync(targetPath) && !isStubBinary(targetPath)
+    ? targetPath
+    : existsSync(aliasPath) && !isStubBinary(aliasPath)
+      ? aliasPath
+      : null;
+
+  let sourcePath = overridePath ?? (existingPath && !agentSidecarsForceBuild ? existingPath : findAgentBinary(spec));
+  if (!sourcePath || agentSidecarsForceBuild) {
+    const built = buildAgentBinary(spec);
+    if (built) {
+      sourcePath = findAgentBinary(spec);
+    } else if (agentSidecarsForceBuild) {
+      const message = `${spec.displayName} sidecar build failed while OPENONE_AGENT_SIDECAR_FORCE_BUILD=1.`;
+      if (agentSidecarsOptional) {
+        console.warn(message);
+        return null;
+      }
+      console.error(message);
+      process.exit(1);
+    }
+  }
+
+  if (!sourcePath) {
+    const message = [
+      `${spec.displayName} sidecar is missing.`,
+      `Expected ${process.env[spec.envBinary]?.trim() ? spec.envBinary : spec.vendorDir}.`,
+      `Set ${spec.envBinary} to a built executable or build ${spec.cargoPackage}.`,
+    ].join(" ");
+    if (agentSidecarsOptional) {
+      console.warn(message);
+      return null;
+    }
+    console.error(message);
+    process.exit(1);
+  }
+
+  mkdirSync(sidecarDir, { recursive: true });
+  for (const destination of [...new Set([targetPath, aliasPath])]) {
+    if (sourcePath !== destination) {
+      try {
+        if (existsSync(destination)) unlinkSync(destination);
+      } catch {
+        // ignore
+      }
+      copyFileSync(sourcePath, destination);
+    }
+    try {
+      chmodSync(destination, 0o755);
+    } catch {
+      // ignore
+    }
+  }
+
+  const version = readBinaryVersion(aliasPath) || readBinaryVersion(targetPath) || "bundled";
+  console.log(`${spec.displayName} sidecar ready (${version}).`);
+  return {
+    key: spec.key,
+    version,
+    path: aliasPath,
+    targetPath,
+  };
 };
 
 const adHocSignDarwin = (filePath) => {
@@ -483,6 +778,10 @@ if (existsSync(orchestratorBuildPath)) {
   }
 }
 
+const preparedAgentSidecars = agentSidecarSpecs
+  .map((spec) => prepareAgentSidecar(spec))
+  .filter(Boolean);
+
 adHocSignDarwinSidecars([
   opencodePath,
   opencodeTargetPath,
@@ -490,6 +789,7 @@ adHocSignDarwinSidecars([
   orchestratorBuildPath,
   orchestratorPath,
   orchestratorTargetPath,
+  ...preparedAgentSidecars.flatMap((sidecar) => [sidecar.path, sidecar.targetPath]),
 ]);
 
 const openworkServerVersion = (() => {
@@ -524,6 +824,13 @@ const versions = {
     sha256: existsSync(orchestratorPath) ? sha256File(orchestratorPath) : null,
   },
 };
+
+for (const sidecar of preparedAgentSidecars) {
+  versions[sidecar.key] = {
+    version: sidecar.version,
+    sha256: existsSync(sidecar.path) ? sha256File(sidecar.path) : null,
+  };
+}
 
 const missing = Object.entries(versions)
   .filter(([, info]) => !info.version || !info.sha256)

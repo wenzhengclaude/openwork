@@ -1,5 +1,7 @@
 import { memo, useCallback } from "react";
+import { ArrowDownToLine, ArrowUpToLine } from "lucide-react";
 
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   selectSessionIsStickyBottom,
   selectSessionTopClippedMessageId,
@@ -13,6 +15,9 @@ function useSessionScrollOverlayState(sessionId: string) {
   return { isAtBottom, topClippedMessageId };
 }
 
+const jumpButtonClass =
+  "flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 type JumpToStartButtonProps = {
   onJumpToStartOfMessage: (behavior?: ScrollBehavior) => void;
 };
@@ -25,13 +30,22 @@ const JumpToStartButton = memo(function JumpToStartButton({
   }, [onJumpToStartOfMessage]);
 
   return (
-    <button
-      type="button"
-      className="rounded-full px-3 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover"
-      onClick={handleClick}
-    >
-      Jump to start
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className={jumpButtonClass}
+            aria-label="Jump to start"
+            title="Jump to start"
+            onClick={handleClick}
+          >
+            <ArrowUpToLine className="size-4" />
+          </button>
+        }
+      />
+      <TooltipContent>Jump to start</TooltipContent>
+    </Tooltip>
   );
 });
 
@@ -47,13 +61,22 @@ const JumpToLatestButton = memo(function JumpToLatestButton({
   }, [onJumpToLatest]);
 
   return (
-    <button
-      type="button"
-      className="rounded-full px-3 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover"
-      onClick={handleClick}
-    >
-      Jump to latest
-    </button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className={jumpButtonClass}
+            aria-label="Jump to latest"
+            title="Jump to latest"
+            onClick={handleClick}
+          >
+            <ArrowDownToLine className="size-4" />
+          </button>
+        }
+      />
+      <TooltipContent>Jump to latest</TooltipContent>
+    </Tooltip>
   );
 });
 
@@ -80,7 +103,7 @@ export const SessionScrollOverlay = memo(function SessionScrollOverlay({
 
   return (
     <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 justify-center">
-      <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-dls-border bg-dls-surface/95 p-1 shadow-(--dls-card-shadow) backdrop-blur-md">
+      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-dls-border bg-dls-surface/95 p-1 shadow-(--dls-card-shadow) backdrop-blur-md">
         {showJumpToStart ? (
           <JumpToStartButton onJumpToStartOfMessage={onJumpToStartOfMessage} />
         ) : null}

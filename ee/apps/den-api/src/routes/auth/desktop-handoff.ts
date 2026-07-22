@@ -139,10 +139,10 @@ function buildOpenworkDeepLink(input: {
   grant: string
   denBaseUrl: string
 }) {
-  const requestedScheme = input.scheme?.trim() || "openwork"
+  const requestedScheme = input.scheme?.trim() || "openone"
   const scheme = /^[a-z][a-z0-9+.-]*$/i.test(requestedScheme)
     ? requestedScheme
-    : "openwork"
+    : "openone"
   const url = new URL(`${scheme}://den-auth`)
   url.searchParams.set("grant", input.grant)
   url.searchParams.set("denBaseUrl", input.denBaseUrl)
@@ -190,7 +190,7 @@ export function registerDesktopAuthRoutes<T extends { Variables: AuthContextVari
       grant,
       expiresAt: expiresAt.toISOString(),
       openworkUrl: buildOpenworkDeepLink({
-        scheme: input.desktopScheme || "openwork",
+        scheme: input.desktopScheme || "openone",
         grant,
         denBaseUrl,
       }),

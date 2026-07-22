@@ -558,9 +558,9 @@ export function createWorkspaceStore({ app, defaultDenBaseUrl, defaultRequireSig
     // Dev mode sandboxes HOME under userData (see desktopBootstrapPath);
     // mirror that so the dev default workspace never touches the real home.
     if (process.env.OPENWORK_DEV_MODE === "1") {
-      return path.join(app.getPath("userData"), "openwork-dev-data", "home", "OpenWork");
+      return path.join(app.getPath("userData"), "openwork-dev-data", "home", "Open One");
     }
-    return path.join(os.homedir(), "OpenWork");
+    return path.join(os.homedir(), "Open One");
   }
 
   // True first run: create the default "Open One" workspace under the user's
@@ -663,7 +663,7 @@ export function createWorkspaceStore({ app, defaultDenBaseUrl, defaultRequireSig
         cache: "no-store",
       });
       if (!response.ok) {
-        throw new Error(`OpenWork workspace discovery failed (${response.status} ${response.statusText || "HTTP error"})`);
+        throw new Error(`Open One workspace discovery failed (${response.status} ${response.statusText || "HTTP error"})`);
       }
       return await response.json();
     } finally {
@@ -959,8 +959,8 @@ export function createWorkspaceStore({ app, defaultDenBaseUrl, defaultRequireSig
       if (!discovered?.id) {
         throw new Error(
           directory
-            ? `OpenWork server has no workspace matching ${directory}.`
-            : "OpenWork server returned no workspaces.",
+            ? `Open One server has no workspace matching ${directory}.`
+            : "Open One server returned no workspaces.",
         );
       }
       resolvedOpenworkWorkspaceId = String(discovered.id).trim();
@@ -1034,8 +1034,8 @@ export function createWorkspaceStore({ app, defaultDenBaseUrl, defaultRequireSig
           if (!discovered?.id) {
             throw new Error(
               directory
-                ? `OpenWork server has no workspace matching ${directory}.`
-                : "OpenWork server returned no workspaces.",
+                ? `Open One server has no workspace matching ${directory}.`
+                : "Open One server returned no workspaces.",
             );
           }
           remoteWorkspaceId = String(discovered.id).trim();

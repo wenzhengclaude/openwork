@@ -68,7 +68,7 @@ export function useModelBehavior(input: UseModelBehaviorInput) {
         modelImageInputSupported: null,
       };
     }
-    const summary = getModelBehaviorSummary(defaultModel.providerID, model, variant);
+    const summary = getModelBehaviorSummary(defaultModel.providerID, model, variant, null, defaultModel.modelID);
     return {
       modelVariantLabel: summary.label,
       modelBehaviorOptions: summary.options,

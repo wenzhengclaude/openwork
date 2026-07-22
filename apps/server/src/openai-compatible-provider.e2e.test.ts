@@ -87,12 +87,14 @@ describe("OpenAI-compatible model probe", () => {
                 context_window: 128000,
                 max_output_tokens: 4096,
                 supports_reasoning: true,
+                supports_reasoning_effort: true,
                 capabilities: {
                   input_modalities: ["text", "image"],
                   output_modalities: ["text"],
                 },
               },
               { id: "minimax-m27-with-qwen-vl" },
+              { id: "gpt-5.5", name: "GPT-5.5" },
               { id: "model-a", name: "Duplicate" },
             ],
           });
@@ -121,11 +123,17 @@ describe("OpenAI-compatible model probe", () => {
           contextWindow: 128000,
           outputLimit: 4096,
           reasoning: true,
+          reasoningEfforts: ["low", "medium", "high", "xhigh"],
           modalities: { input: ["text", "image"], output: ["text"] },
         },
         {
           id: "minimax-m27-with-qwen-vl",
           name: "minimax-m27-with-qwen-vl",
+          modalities: { input: ["text", "image"], output: ["text"] },
+        },
+        {
+          id: "gpt-5.5",
+          name: "GPT-5.5",
           modalities: { input: ["text", "image"], output: ["text"] },
         },
       ],

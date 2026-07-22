@@ -7,6 +7,7 @@ import { buildOpenworkRuntimeConfig } from "./openwork-runtime-config.js";
 import { readOpenworkWorkspaceConfig } from "./openwork-workspace-config-store.js";
 import { addPlugin, listPlugins, removePlugin } from "./plugins.js";
 import {
+  closeRuntimeOpencodeConfigStoresForTests,
   onRuntimeOpencodeConfigWrite,
   readRuntimeOpencodeConfig,
   writeRuntimeOpencodeConfig,
@@ -49,9 +50,13 @@ async function withWorkspace(fn: (input: { root: string; config: ServerConfig })
   try {
     await fn({ root, config: serverConfig(root, dbPath) });
   } finally {
+    await closeRuntimeOpencodeConfigStoresForTests();
     if (previousDb === undefined) delete process.env.OPENWORK_RUNTIME_DB;
     else process.env.OPENWORK_RUNTIME_DB = previousDb;
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch((error: unknown) => {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "EBUSY") return;
+      throw error;
+    });
   }
 }
 
@@ -140,6 +145,129 @@ describe("runtime OpenCode config store", () => {
       };
       expect(runtimeConfig.plugin).toContain("runtime-plugin");
       expect(runtimeConfig.mcp?.runtime?.url).toBe("https://runtime.example/mcp");
+    });
+  });
+
+  test("adds image input support to saved company local GPT-5 models", async () => {
+    await withWorkspace(async ({ config }) => {
+      await writeRuntimeOpencodeConfig(config, WORKSPACE_ID, (current) => ({
+        ...current,
+        provider: {
+          "company-local": {
+            npm: "@ai-sdk/openai-compatible",
+            name: "公司本地模型",
+            models: {
+              "gpt-5.5": { name: "GPT-5.5" },
+            },
+          },
+          "company-local-http-models-example-test-v1-abcd": {
+            npm: "@ai-sdk/openai-compatible",
+            name: "公司本地模型 (http://models.example.test/v1)",
+            models: {
+              "gpt-5.6-sol": { name: "GPT-5.6 Sol", capabilities: { reasoning: true } },
+            },
+          },
+          openrouter: {
+            npm: "@ai-sdk/openai-compatible",
+            name: "OpenRouter",
+            models: {
+              "gpt-5.5": { name: "GPT-5.5" },
+            },
+          },
+        },
+      }));
+
+      const runtime = await readRuntimeOpencodeConfig(config, WORKSPACE_ID);
+      expect(runtime.provider?.["company-local"]).toMatchObject({
+        models: {
+          "gpt-5.5": {
+            name: "GPT-5.5",
+            modalities: { input: ["text", "image"], output: ["text"] },
+            attachment: true,
+          },
+        },
+      });
+      expect(runtime.provider?.["company-local-http-models-example-test-v1-abcd"]).toMatchObject({
+        models: {
+          "gpt-5.6-sol": {
+            name: "GPT-5.6 Sol",
+            capabilities: { reasoning: true },
+            modalities: { input: ["text", "image"], output: ["text"] },
+            attachment: true,
+          },
+        },
+      });
+      expect(runtime.provider?.openrouter).toMatchObject({
+        models: {
+          "gpt-5.5": { name: "GPT-5.5" },
+        },
+      });
+    });
+  });
+
+  test("shares company local providers with new workspaces on the same device", async () => {
+    await withWorkspace(async ({ config }) => {
+      await writeRuntimeOpencodeConfig(config, WORKSPACE_ID, (current) => ({
+        ...current,
+        provider: {
+          "company-local-http-models-example-test-v1-abcd": {
+            npm: "@ai-sdk/openai-compatible",
+            name: "公司本地模型 (http://models.example.test/v1)",
+            options: { baseURL: "http://models.example.test/v1" },
+            models: {
+              "gpt-5.5": { name: "GPT-5.5" },
+            },
+          },
+          openrouter: {
+            npm: "@ai-sdk/openai-compatible",
+            name: "OpenRouter",
+            models: {
+              "openrouter-model": { name: "OpenRouter Model" },
+            },
+          },
+        },
+      }));
+
+      const otherWorkspace = await readRuntimeOpencodeConfig(config, "ws_other_runtime_test");
+      expect(otherWorkspace.provider?.["company-local-http-models-example-test-v1-abcd"]).toMatchObject({
+        name: "公司本地模型 (http://models.example.test/v1)",
+        options: { baseURL: "http://models.example.test/v1" },
+        models: {
+          "gpt-5.5": {
+            name: "GPT-5.5",
+            modalities: { input: ["text", "image"], output: ["text"] },
+            attachment: true,
+          },
+        },
+      });
+      expect(otherWorkspace.provider?.openrouter).toBeUndefined();
+
+      await writeRuntimeOpencodeConfig(config, "ws_other_runtime_test", (current) => ({
+        ...current,
+        provider: {
+          "company-local-http-models-example-test-v1-abcd": {
+            npm: "@ai-sdk/openai-compatible",
+            name: "Workspace override",
+            options: { baseURL: "http://workspace.example.test/v1" },
+            models: {
+              "gpt-5.6": { name: "GPT-5.6" },
+            },
+          },
+        },
+      }));
+
+      const overridden = await readRuntimeOpencodeConfig(config, "ws_other_runtime_test");
+      expect(overridden.provider?.["company-local-http-models-example-test-v1-abcd"]).toMatchObject({
+        name: "Workspace override",
+        options: { baseURL: "http://workspace.example.test/v1" },
+        models: {
+          "gpt-5.6": {
+            name: "GPT-5.6",
+            modalities: { input: ["text", "image"], output: ["text"] },
+            attachment: true,
+          },
+        },
+      });
     });
   });
 

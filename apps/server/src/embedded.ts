@@ -12,6 +12,7 @@ import { startServer, syncAllWorkspacesRuntimeMcpToEngine } from "./server.js";
 import { ensureLocalWorkspaceFiles } from "./workspace-init.js";
 import { findManagedEngineWorkspace } from "./workspaces.js";
 import { keepOpenworkRuntimeConfigFileFresh, writeOpenworkRuntimeConfigFile } from "./openwork-runtime-config.js";
+import { syncManagedOpenCodeSkills } from "./managed-opencode-skills.js";
 import type { ServeResult } from "./serve-node.js";
 import type { ServerConfig } from "./types.js";
 
@@ -49,6 +50,11 @@ export async function startEmbeddedServer(options: EmbeddedServerOptions): Promi
 
   if (!config.readOnly) {
     await ensureLocalWorkspaceFiles(config.workspaces);
+    for (const workspace of config.workspaces) {
+      if (workspace.workspaceType !== "remote" && workspace.path.trim()) {
+        await syncManagedOpenCodeSkills(workspace.path);
+      }
+    }
   }
 
   if (!config.opencodeBaseUrl && options.manageOpencode) {

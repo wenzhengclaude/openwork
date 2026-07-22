@@ -4,10 +4,15 @@ const { spawnSync } = require("node:child_process");
 
 const computerUseHelperAppName = "OpenWork Computer Use.app";
 
-const sidecarBases = [
+const requiredSidecarBases = [
   "opencode",
-  "openwork-server",
   "openwork-orchestrator",
+];
+
+const optionalSidecarBases = [
+  "codex",
+  "grok",
+  "openwork-server",
   "chrome-devtools-mcp",
 ];
 
@@ -71,10 +76,13 @@ function signComputerUseHelper(context) {
   }
 }
 
-function copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName) {
+function copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName, required) {
   const targetPath = path.join(sidecarsDir, targetName);
   if (!fs.existsSync(targetPath)) {
-    throw new Error(`Missing packaged sidecar for target: ${targetName}`);
+    if (required) {
+      throw new Error(`Missing packaged sidecar for target: ${targetName}`);
+    }
+    return false;
   }
 
   const aliasPath = path.join(sidecarsDir, aliasName);
@@ -84,6 +92,7 @@ function copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName) {
   } catch {
     // Windows and some filesystems may ignore chmod.
   }
+  return true;
 }
 
 async function afterPack(context) {
@@ -97,12 +106,21 @@ async function afterPack(context) {
   const executableSuffix = isWindows ? ".exe" : "";
   const keep = new Set();
 
-  for (const base of sidecarBases) {
+  for (const base of requiredSidecarBases) {
     const aliasName = `${base}${executableSuffix}`;
     const targetName = `${base}-${triple}${executableSuffix}`;
-    copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName);
+    copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName, true);
     keep.add(aliasName);
     keep.add(targetName);
+  }
+
+  for (const base of optionalSidecarBases) {
+    const aliasName = `${base}${executableSuffix}`;
+    const targetName = `${base}-${triple}${executableSuffix}`;
+    if (copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName, false)) {
+      keep.add(aliasName);
+      keep.add(targetName);
+    }
   }
 
   const versionsAlias = "versions.json";

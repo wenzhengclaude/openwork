@@ -744,7 +744,7 @@ export function createExtensionsStore(options: {
     const nextConfig = withWorkspaceCloudImports(config, nextCloudImports);
     const persisted = await writeWorkspaceOpenworkConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("OpenWork server unavailable. Connect to manage imported cloud marketplaces.");
+      throw new Error("Open One server unavailable. Connect to manage imported cloud marketplaces.");
     }
     setStateField("importedCloudMarketplaces", nextMarketplaces);
     void refreshPendingCloudPluginChanges();
@@ -759,7 +759,7 @@ export function createExtensionsStore(options: {
     });
     const persisted = await writeWorkspaceOpenworkConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("OpenWork server unavailable. Connect to manage imported cloud skills.");
+      throw new Error("Open One server unavailable. Connect to manage imported cloud skills.");
     }
     setStateField("importedCloudSkills", nextSkills);
   };
@@ -774,7 +774,7 @@ export function createExtensionsStore(options: {
     const nextConfig = withWorkspaceCloudImports(config, nextCloudImports);
     const persisted = await writeWorkspaceOpenworkConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("OpenWork server unavailable. Connect to manage imported cloud plugins.");
+      throw new Error("Open One server unavailable. Connect to manage imported cloud plugins.");
     }
     setStateField("importedCloudPlugins", nextPlugins);
     void refreshPendingCloudPluginChanges(nextPlugins);
@@ -783,15 +783,23 @@ export function createExtensionsStore(options: {
   const findCloudMarketplace = (marketplaceId: string) =>
     snapshot.cloudOrgMarketplaces.find((entry) => entry.marketplace.id === marketplaceId)?.marketplace ?? null;
 
-  const buildCloudSkillContent = (name: string, description: string, body: string) => {
+  const buildCloudSkillContent = (name: string, description: string, body: string, pluginSupportPath?: string) => {
     const safeDescription = description.replace(/\s+/g, " ").trim();
     const normalizedBody = body.replace(/^\s*\n?/, "");
+    const supportNote = pluginSupportPath
+      ? [
+        "> Open One installed this plugin's runtime files under",
+        `> \`${pluginSupportPath}\`. Resolve plugin-level support and shared resources from that plugin root.`,
+        "",
+      ].join("\n")
+      : "";
     return [
       "---",
       `name: ${JSON.stringify(name)}`,
       `description: ${JSON.stringify(safeDescription)}`,
       "---",
       "",
+      supportNote,
       normalizedBody,
     ].join("\n");
   };
@@ -821,11 +829,11 @@ export function createExtensionsStore(options: {
     }
 
     if (hasOpenworkTarget) {
-      throw new Error("OpenWork server cannot write skills for this workspace.");
+      throw new Error("Open One server cannot write skills for this workspace.");
     }
 
     if (isRemoteWorkspace) {
-      throw new Error("OpenWork server unavailable. Connect to import skills.");
+      throw new Error("Open One server unavailable. Connect to import skills.");
     }
 
     if (!isDesktopRuntime()) {
@@ -880,11 +888,11 @@ export function createExtensionsStore(options: {
     }
 
     if (hasOpenworkTarget) {
-      throw new Error("OpenWork server cannot remove skills for this workspace.");
+      throw new Error("Open One server cannot remove skills for this workspace.");
     }
 
     if (isRemoteWorkspace) {
-      throw new Error("OpenWork server unavailable. Connect to remove skills.");
+      throw new Error("Open One server unavailable. Connect to remove skills.");
     }
 
     if (!isDesktopRuntime()) {
@@ -911,6 +919,14 @@ export function createExtensionsStore(options: {
     return `${base.replace(/-plugin$/, "")}-plugin`;
   };
 
+  const pluginRuntimeObjectTypes = new Set(["agent", "command", "skill"]);
+
+  const sourcePathForObject = (object: NonNullable<DenOrgPluginResolved["memberships"][number]["configObject"]>) => {
+    const currentPath = object.currentRelativePath?.trim();
+    if (currentPath) return currentPath;
+    return object.id.includes("/") ? object.id : "";
+  };
+
   const normalizePluginSourcePath = (path: string, objectType: string, namespace: string) => {
     const parts = path.trim().replace(/^\/+/, "").split("/").filter(Boolean);
     if (parts.length === 0 || parts.some((part) => part === ".." || part === ".")) return "";
@@ -931,6 +947,10 @@ export function createExtensionsStore(options: {
     const folderIndex = searchParts.findIndex((part) => part === folder);
     if (folderIndex < 0 || folderIndex === searchParts.length - 1) return "";
     const rest = searchParts.slice(folderIndex + 1);
+    if (objectType === "skill" || (opencodeIndex < 0 && pluginRuntimeObjectTypes.has(objectType))) {
+      const pluginRest = rest[0] === namespace ? rest.slice(1) : rest;
+      return [".opencode", "plugins", namespace, folder, ...pluginRest].join("/");
+    }
     if (rest[0] === namespace) return [".opencode", folder, ...rest].join("/");
     return [".opencode", folder, namespace, ...rest].join("/");
   };
@@ -939,7 +959,7 @@ export function createExtensionsStore(options: {
     object: NonNullable<DenOrgPluginResolved["memberships"][number]["configObject"]>,
     namespace: string,
   ) => {
-    const existing = normalizePluginSourcePath(object.currentRelativePath ?? "", object.objectType, namespace);
+    const existing = normalizePluginSourcePath(sourcePathForObject(object), object.objectType, namespace);
     if (existing) {
       if (object.objectType === "skill") {
         const parts = existing.split("/").filter(Boolean);
@@ -947,14 +967,14 @@ export function createExtensionsStore(options: {
         const skillName = /^SKILL\.md$/i.test(lastPart)
           ? parts.at(-2) ?? slugifyConfigObjectName(object.title, object.id)
           : lastPart || slugifyConfigObjectName(object.title, object.id);
-        return `.opencode/skills/${namespace}/${skillName}/SKILL.md`;
+        return `.opencode/plugins/${namespace}/skills/${skillName}/SKILL.md`;
       }
       return existing;
     }
     const name = slugifyConfigObjectName(object.title, object.id);
     switch (object.objectType) {
       case "skill":
-        return `.opencode/skills/${namespace}/${name}/SKILL.md`;
+        return `.opencode/plugins/${namespace}/skills/${name}/SKILL.md`;
       case "agent":
         return `.opencode/agents/${namespace}/${name}.md`;
       case "command":
@@ -1107,7 +1127,7 @@ export function createExtensionsStore(options: {
       await openworkClient.addMcp(openworkWorkspaceId, { name, config });
       return;
     }
-    throw new Error("OpenWork server unavailable. Connect to import MCP servers into this workspace.");
+    throw new Error("Open One server unavailable. Connect to import MCP servers into this workspace.");
   };
 
   const deletePluginMcpConfig = async (name: string) => {
@@ -1123,7 +1143,7 @@ export function createExtensionsStore(options: {
       await openworkClient.removeMcp(openworkWorkspaceId, name);
       return;
     }
-    throw new Error("OpenWork server unavailable. Connect to remove imported MCP servers from this workspace.");
+    throw new Error("Open One server unavailable. Connect to remove imported MCP servers from this workspace.");
   };
 
   const pluginReloadReason = (objectType: string): ReloadReason => {
@@ -1154,7 +1174,7 @@ export function createExtensionsStore(options: {
       await openworkClient.writeWorkspaceFile(openworkWorkspaceId, { path, content, force: true });
       return;
     }
-    throw new Error("OpenWork server unavailable. Connect to import plugin files into this workspace.");
+    throw new Error("Open One server unavailable. Connect to import plugin files into this workspace.");
   };
 
   const deletePluginWorkspaceFiles = async (files: Array<{ path: string; recursive?: boolean }>) => {
@@ -1177,7 +1197,7 @@ export function createExtensionsStore(options: {
       }
       return;
     }
-    throw new Error("OpenWork server unavailable. Connect to remove imported plugin files from this workspace.");
+    throw new Error("Open One server unavailable. Connect to remove imported plugin files from this workspace.");
   };
 
   const applyCloudOrgPluginImport = async (
@@ -1256,8 +1276,10 @@ export function createExtensionsStore(options: {
       const rawDesc = (object.description?.trim() || object.title).trim();
       const description = rawDesc.slice(0, 1024) || object.title.slice(0, 1024);
       if (object.objectType === "skill") {
-        const installName = path.match(/^\.opencode\/skills\/[^/]+\/([^/]+)\/SKILL\.md$/)?.[1] ?? slugifyConfigObjectName(object.title, object.id);
-        content = buildCloudSkillContent(installName, description || "Skill", extractSkillBodyMarkdown(content));
+        const installName = path.match(/^\.opencode\/plugins\/[^/]+\/skills\/([^/]+)\/SKILL\.md$/)?.[1]
+          ?? path.match(/^\.opencode\/skills\/[^/]+\/([^/]+)\/SKILL\.md$/)?.[1]
+          ?? slugifyConfigObjectName(object.title, object.id);
+        content = buildCloudSkillContent(installName, description || "Skill", extractSkillBodyMarkdown(content), `.opencode/plugins/${namespace}`);
       } else if (object.objectType === "agent") {
         content = buildCloudAgentContent(description, content);
       } else if (object.objectType === "command") {
@@ -1655,7 +1677,7 @@ export function createExtensionsStore(options: {
       const settings = readDenSettings();
       const token = settings.authToken?.trim() ?? "";
       const orgId = settings.activeOrgId?.trim() ?? "";
-      if (!token || !orgId) throw new Error("Sign in to OpenWork Cloud and choose an organization first.");
+      if (!token || !orgId) throw new Error("Sign in to Open One Cloud and choose an organization first.");
       const client = createDenClient({ baseUrl: settings.baseUrl, token });
       const resolved = await client.getOrgPluginResolved(orgId, plugin);
       const target = await resolveWorkspaceServerTarget();
@@ -1697,7 +1719,7 @@ export function createExtensionsStore(options: {
   async function previewClaudePlugin(url: string): Promise<OpenworkClaudePluginPreview> {
     const target = await resolveWorkspaceServerTarget();
     if (!target.openworkClient || !target.openworkWorkspaceId) {
-      throw new Error("OpenWork server unavailable. Connect to install plugins from GitHub.");
+      throw new Error("Open One server unavailable. Connect to install plugins from GitHub.");
     }
     const result = await target.openworkClient.previewClaudePlugin(target.openworkWorkspaceId, { url });
     return result.preview;
@@ -1709,7 +1731,7 @@ export function createExtensionsStore(options: {
     try {
       const target = await resolveWorkspaceServerTarget();
       if (!target.openworkClient || !target.openworkWorkspaceId) {
-        throw new Error("OpenWork server unavailable. Connect to install plugins from GitHub.");
+        throw new Error("Open One server unavailable. Connect to install plugins from GitHub.");
       }
       const result = await target.openworkClient.installClaudePlugin(target.openworkWorkspaceId, { url });
       await refreshSkills({ force: true });
@@ -1757,7 +1779,8 @@ export function createExtensionsStore(options: {
           continue;
         }
         if (!file.path.startsWith(".opencode/")) continue;
-        const skillDir = file.path.match(/^(\.opencode\/skills\/[^/]+\/[^/]+)\/SKILL\.md$/)?.[1];
+        const skillDir = file.path.match(/^(\.opencode\/plugins\/[^/]+\/skills\/[^/]+)\/SKILL\.md$/)?.[1]
+          ?? file.path.match(/^(\.opencode\/skills\/[^/]+\/[^/]+)\/SKILL\.md$/)?.[1];
         fileDeletes.push(skillDir ? { path: skillDir, recursive: true } : { path: file.path });
       }
       await Promise.all(removedMcpNames.map((name) => deletePluginMcpConfig(name)));
@@ -1802,8 +1825,8 @@ export function createExtensionsStore(options: {
       openworkSnapshot.openworkServerCapabilities?.hub?.skills?.install !== false;
 
     if (!canUseOpenworkServer) {
-      if (isRemoteWorkspace) return { ok: false, message: "OpenWork server unavailable. Connect to install skills." };
-      return { ok: false, message: "Hub install requires OpenWork server." };
+      if (isRemoteWorkspace) return { ok: false, message: "Open One server unavailable. Connect to install skills." };
+      return { ok: false, message: "Hub install requires Open One server." };
     }
 
     options.setBusy(true);
@@ -1812,7 +1835,7 @@ export function createExtensionsStore(options: {
 
     try {
       const repoOverride: OpenworkHubRepo = { owner: repo.owner, repo: repo.repo, ref: repo.ref };
-      if (!openworkClient || !openworkWorkspaceId) return { ok: false, message: "Hub install requires OpenWork server." };
+      if (!openworkClient || !openworkWorkspaceId) return { ok: false, message: "Hub install requires Open One server." };
       const result = await openworkClient.installHubSkill(openworkWorkspaceId, trimmed, { repo: repoOverride });
       await Promise.all([refreshSkills({ force: true }), refreshHubSkills({ force: true })]);
       if (!result?.ok) return { ok: false, message: "Install failed." };
@@ -1982,7 +2005,7 @@ export function createExtensionsStore(options: {
       mutateState((current) => ({
         ...current,
         skills: [],
-        skillsStatus: "OpenWork server cannot read skills for this workspace.",
+        skillsStatus: "Open One server cannot read skills for this workspace.",
       }));
       return;
     }
@@ -2032,7 +2055,7 @@ export function createExtensionsStore(options: {
       mutateState((current) => ({
         ...current,
         skills: [],
-        skillsStatus: "OpenWork server unavailable. Connect to load skills.",
+        skillsStatus: "Open One server unavailable. Connect to load skills.",
       }));
       return;
     }
@@ -2152,9 +2175,9 @@ export function createExtensionsStore(options: {
     if (scope === "project" && hasOpenworkTarget) {
       mutateState((current) => ({
         ...current,
-        pluginStatus: "OpenWork server cannot read plugins for this workspace.",
+        pluginStatus: "Open One server cannot read plugins for this workspace.",
         pluginList: [],
-        sidebarPluginStatus: "OpenWork server cannot read plugins for this workspace.",
+        sidebarPluginStatus: "Open One server cannot read plugins for this workspace.",
         sidebarPluginList: [],
       }));
       refreshPluginsInFlight = false;
@@ -2176,9 +2199,9 @@ export function createExtensionsStore(options: {
     if (!isLocalWorkspace && !canUseOpenworkServer) {
       mutateState((current) => ({
         ...current,
-        pluginStatus: "OpenWork server unavailable. Connect to manage plugins.",
+        pluginStatus: "Open One server unavailable. Connect to manage plugins.",
         pluginList: [],
-        sidebarPluginStatus: "Connect an OpenWork server to load plugins.",
+        sidebarPluginStatus: "Connect an Open One server to load plugins.",
         sidebarPluginList: [],
       }));
       refreshPluginsInFlight = false;
@@ -2296,7 +2319,7 @@ export function createExtensionsStore(options: {
     }
 
     if (snapshot.pluginScope === "project" && hasOpenworkTarget) {
-      setStateField("pluginStatus", "OpenWork server cannot write plugins for this workspace.");
+      setStateField("pluginStatus", "Open One server cannot write plugins for this workspace.");
       return;
     }
 
@@ -2306,7 +2329,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace) {
-      setStateField("pluginStatus", "OpenWork server unavailable. Connect to manage plugins.");
+      setStateField("pluginStatus", "Open One server unavailable. Connect to manage plugins.");
       return;
     }
 
@@ -2386,7 +2409,7 @@ export function createExtensionsStore(options: {
     }
 
     if (snapshot.pluginScope === "project" && hasOpenworkTarget) {
-      setStateField("pluginStatus", "OpenWork server cannot write plugins for this workspace.");
+      setStateField("pluginStatus", "Open One server cannot write plugins for this workspace.");
       return;
     }
 
@@ -2396,7 +2419,7 @@ export function createExtensionsStore(options: {
     }
 
     if (!isLocalWorkspace) {
-      setStateField("pluginStatus", "OpenWork server unavailable. Connect to manage plugins.");
+      setStateField("pluginStatus", "Open One server unavailable. Connect to manage plugins.");
       return;
     }
 
@@ -2506,13 +2529,13 @@ export function createExtensionsStore(options: {
     }
 
     if (hasOpenworkTarget) {
-      const message = "OpenWork server cannot write skills for this workspace.";
+      const message = "Open One server cannot write skills for this workspace.";
       setStateField("skillsStatus", message);
       return { ok: false, message };
     }
 
     if (isRemoteWorkspace) {
-      const message = "OpenWork server unavailable. Connect to install skills.";
+      const message = "Open One server unavailable. Connect to install skills.";
       setStateField("skillsStatus", message);
       return { ok: false, message };
     }
@@ -2647,7 +2670,7 @@ export function createExtensionsStore(options: {
     }
 
     if (hasOpenworkTarget) {
-      setStateField("skillsStatus", "OpenWork server cannot read skills for this workspace.");
+      setStateField("skillsStatus", "Open One server cannot read skills for this workspace.");
       return null;
     }
 
@@ -2657,7 +2680,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setStateField("skillsStatus", "OpenWork server unavailable. Connect to view skills.");
+      setStateField("skillsStatus", "Open One server unavailable. Connect to view skills.");
       return null;
     }
     if (!isDesktopRuntime()) {
@@ -2714,7 +2737,7 @@ export function createExtensionsStore(options: {
     }
 
     if (hasOpenworkTarget) {
-      setStateField("skillsStatus", "OpenWork server cannot write skills for this workspace.");
+      setStateField("skillsStatus", "Open One server cannot write skills for this workspace.");
       return;
     }
 
@@ -2724,7 +2747,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setStateField("skillsStatus", "OpenWork server unavailable. Connect to edit skills.");
+      setStateField("skillsStatus", "Open One server unavailable. Connect to edit skills.");
       return;
     }
     if (!isDesktopRuntime()) {

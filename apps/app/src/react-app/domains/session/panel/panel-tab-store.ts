@@ -2,10 +2,11 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import { isCollectibleArtifactTarget, type OpenTarget, type OpenTargetPreview } from "../artifacts/open-target";
+import type { DiffReviewFile } from "../review/diff-review";
 
 export const PERSISTED_PANEL_TAB_STORE_KEY = "openwork:panel-tabs:v1";
 
-export type PanelTabType = "artifact" | "browser";
+export type PanelTabType = "artifact" | "browser" | "review";
 
 export type { BrowserPanelTab } from "../../../../app/lib/desktop-types";
 import type { BrowserPanelTab } from "../../../../app/lib/desktop-types";
@@ -17,7 +18,14 @@ export type ArtifactPanelTab = {
   preview: OpenTargetPreview;
 }
 
-export type PanelTab = BrowserPanelTab | ArtifactPanelTab;
+export type ReviewPanelTab = {
+  id: string;
+  type: "review";
+  label: string;
+  files: DiffReviewFile[];
+};
+
+export type PanelTab = BrowserPanelTab | ArtifactPanelTab | ReviewPanelTab;
 
 export type SessionPanelState = {
   tabs: PanelTab[];
@@ -149,7 +157,26 @@ function isSameTab(left: PanelTab, right: PanelTab) {
     );
   }
 
+  if (left.type === "review" && right.type === "review") {
+    return (
+      left.label === right.label &&
+      left.files.length === right.files.length &&
+      left.files.every((file, index) => isSameReviewFile(file, right.files[index]))
+    );
+  }
+
   return false;
+}
+
+function isSameReviewFile(left: DiffReviewFile, right: DiffReviewFile | undefined) {
+  return (
+    right !== undefined &&
+    left.id === right.id &&
+    left.path === right.path &&
+    left.diff === right.diff &&
+    left.additions === right.additions &&
+    left.deletions === right.deletions
+  );
 }
 
 function isSameSessionPanelState(
@@ -278,7 +305,7 @@ export const usePanelTabStore = create<PanelTabStore>()(
         const mergedTabs: PanelTab[] = [];
 
         for (const tab of session.tabs) {
-          if (tab.type === "artifact") {
+          if (tab.type !== "browser") {
             mergedTabs.push(tab);
             continue;
           }

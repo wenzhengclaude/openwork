@@ -6,6 +6,8 @@ import {
   DEFAULT_AUTH_NAME,
   DEFAULT_WORKER_NAME,
   LAST_WORKER_STORAGE_KEY,
+  PENDING_DESKTOP_AUTH_SCHEME_STORAGE_KEY,
+  PENDING_DESKTOP_AUTH_STORAGE_KEY,
   ONBOARDING_INTENT_STORAGE_KEY,
   PENDING_SOCIAL_SIGNUP_STORAGE_KEY,
   WORKER_STATUS_POLL_MS,
@@ -45,6 +47,7 @@ import {
   getWorkersList,
   identifyPosthogUser,
   isWorkerLaunch,
+  normalizeDesktopSchemeParam,
   listItemToWorker,
   normalizeAuthIntentParam,
   normalizeAuthModeParam,
@@ -191,6 +194,12 @@ function clearPendingAuthIntent() {
   window.sessionStorage.removeItem(PENDING_AUTH_INTENT_STORAGE_KEY);
 }
 
+function clearPendingDesktopAuth() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(PENDING_DESKTOP_AUTH_STORAGE_KEY);
+  window.sessionStorage.removeItem(PENDING_DESKTOP_AUTH_SCHEME_STORAGE_KEY);
+}
+
 export function DenFlowProvider({ children }: { children: ReactNode }) {
   const [authMode, setAuthModeState] = useState<AuthMode>("sign-up");
   const [email, setEmail] = useState("");
@@ -216,7 +225,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
   });
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [desktopAuthRequested, setDesktopAuthRequested] = useState(false);
-  const [desktopAuthScheme, setDesktopAuthScheme] = useState("openwork");
+  const [desktopAuthScheme, setDesktopAuthScheme] = useState("openone");
   const [desktopRedirectBusy, setDesktopRedirectBusy] = useState(false);
   const [desktopRedirectUrl, setDesktopRedirectUrl] = useState<string | null>(null);
   const [desktopRedirectAttempted, setDesktopRedirectAttempted] = useState(false);
@@ -1009,6 +1018,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
       }
 
       setDesktopRedirectUrl(openworkUrl);
+      clearPendingDesktopAuth();
       window.location.assign(openworkUrl);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Failed to open Open One.");
@@ -1294,6 +1304,7 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
       window.sessionStorage.removeItem(PENDING_SOCIAL_SIGNUP_STORAGE_KEY);
       window.sessionStorage.removeItem(PENDING_ORG_INVITATION_STORAGE_KEY);
       window.sessionStorage.removeItem(PENDING_WORKSPACE_CLAIM_STORAGE_KEY);
+      clearPendingDesktopAuth();
     }
   }
 
@@ -1797,10 +1808,20 @@ export function DenFlowProvider({ children }: { children: ReactNode }) {
       setAuthMode(requestedMode);
     }
 
-    setDesktopAuthRequested(params.get("desktopAuth") === "1");
-    const requestedScheme = params.get("desktopScheme")?.trim() ?? "";
-    if (/^[a-z][a-z0-9+.-]*$/i.test(requestedScheme)) {
-      setDesktopAuthScheme(requestedScheme);
+    const requestedDesktopAuth = params.get("desktopAuth") === "1";
+    const storedDesktopAuth = window.sessionStorage.getItem(PENDING_DESKTOP_AUTH_STORAGE_KEY) === "1";
+    const shouldDesktopAuth = requestedDesktopAuth || storedDesktopAuth;
+    setDesktopAuthRequested(shouldDesktopAuth);
+    if (shouldDesktopAuth) {
+      window.sessionStorage.setItem(PENDING_DESKTOP_AUTH_STORAGE_KEY, "1");
+    }
+
+    const requestedScheme = normalizeDesktopSchemeParam(params.get("desktopScheme"));
+    const storedScheme = normalizeDesktopSchemeParam(window.sessionStorage.getItem(PENDING_DESKTOP_AUTH_SCHEME_STORAGE_KEY));
+    const desktopScheme = requestedScheme ?? storedScheme;
+    if (desktopScheme) {
+      setDesktopAuthScheme(desktopScheme);
+      window.sessionStorage.setItem(PENDING_DESKTOP_AUTH_SCHEME_STORAGE_KEY, desktopScheme);
     }
 
     const invitationId = params.get("invite")?.trim() ?? "";

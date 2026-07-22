@@ -40,8 +40,8 @@ export const DEFAULT_SHELL_CONFIG: ShellConfig = {
   appName: "Open One",
   statusBar: true,
   sidebar: true,
-  docsButton: true,
-  feedbackButton: true,
+  docsButton: false,
+  feedbackButton: false,
   cloudSignin: true,
   welcomePage: true,
   starterCards: true,
@@ -56,14 +56,33 @@ export const DEFAULT_SHELL_CONFIG: ShellConfig = {
 /* ------------------------------------------------------------------ */
 
 const STORAGE_KEY = "openwork.shell-config";
+const STATUS_ACTIONS_HIDDEN_MIGRATION_KEY = "openwork.shell-config.status-actions-hidden.v1";
+
+function markStatusActionsHiddenMigration(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STATUS_ACTIONS_HIDDEN_MIGRATION_KEY, "1");
+  } catch {
+    // Ignore storage errors.
+  }
+}
 
 function readShellConfig(): ShellConfig {
   if (typeof window === "undefined") return DEFAULT_SHELL_CONFIG;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SHELL_CONFIG;
+    if (!raw) {
+      markStatusActionsHiddenMigration();
+      return DEFAULT_SHELL_CONFIG;
+    }
     const parsed = JSON.parse(raw);
     const config = { ...DEFAULT_SHELL_CONFIG, ...parsed };
+    if (!window.localStorage.getItem(STATUS_ACTIONS_HIDDEN_MIGRATION_KEY)) {
+      const migrated = { ...config, docsButton: false, feedbackButton: false };
+      writeShellConfig(migrated);
+      markStatusActionsHiddenMigration();
+      return migrated;
+    }
     // Preserve a real custom name, but migrate the previous stock label.
     if (config.appName === "OpenWork") {
       const migrated = { ...config, appName: DEFAULT_SHELL_CONFIG.appName };
