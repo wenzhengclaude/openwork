@@ -327,6 +327,42 @@ describe("CodexRuntime", () => {
     expect(deleteEvent?.details?.diff).toContain("-console.log(\"old\");");
   });
 
+  test("emits Codex read file paths from tool calls and commands", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "openone-codex-read-paths-"));
+    tempDirs.push(dir);
+    const scriptPath = join(dir, "fake-codex-read-paths.mjs");
+    await writeFile(scriptPath, fakeCodexReadPathsScript, "utf8");
+    process.env.OPENONE_CODEX_COMMAND = process.execPath;
+    process.env.OPENONE_CODEX_ARGS = JSON.stringify([scriptPath]);
+
+    const events: Array<Parameters<AgentRunEmitter>[0]> = [];
+    const runtime = new CodexRuntime();
+    const input: AgentRunInput = {
+      workspaceId: "ws_test",
+      workspacePath: dir,
+      mode: "codex",
+      approvalMode: "auto-review",
+      prompt: "read config",
+      capabilities: {
+        mcpServers: {},
+        skillRoots: [],
+        skills: [],
+        pluginPaths: [],
+      },
+    };
+
+    await runtime.run(input, (event) => events.push(event), new AbortController().signal);
+
+    const readToolEvent = events.find((event) => event.type === "tool_call" && event.details?.itemId === "read-1");
+    expect(readToolEvent?.details?.activityKind).toBe("file_read");
+    expect(readToolEvent?.details?.path).toBe("src/main/resources/application.yml");
+
+    const commandEvent = events.find((event) => event.type === "tool_call" && event.details?.itemId === "cmd-1");
+    expect(commandEvent?.details?.files).toEqual([
+      join(dir, "src/main/resources/application-druid.yml"),
+    ]);
+  });
+
   test("skips unreachable MCP servers before starting Codex", async () => {
     const dir = await mkdtemp(join(tmpdir(), "openone-codex-mcp-skip-"));
     tempDirs.push(dir);
@@ -515,6 +551,59 @@ rl.on("line", (line) => {
               diff: "console.log(\\"old\\");\\n",
             },
           ],
+        },
+      },
+    }) + "\\n");
+    process.stdout.write(JSON.stringify({ id: message.id, result: { ok: true } }) + "\\n");
+    process.stdout.write(JSON.stringify({ method: "turn/completed", params: {} }) + "\\n");
+  }
+});
+`;
+
+const fakeCodexReadPathsScript = `
+import { createInterface } from "node:readline";
+
+const rl = createInterface({ input: process.stdin });
+
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    process.stdout.write(JSON.stringify({ id: message.id, result: { ok: true } }) + "\\n");
+    return;
+  }
+  if (message.method === "initialized") return;
+  if (message.method === "skills/extraRoots/set") {
+    process.stdout.write(JSON.stringify({ id: message.id, result: { ok: true } }) + "\\n");
+    return;
+  }
+  if (message.method === "thread/start") {
+    process.stdout.write(JSON.stringify({ id: message.id, result: { id: "thread-test" } }) + "\\n");
+    return;
+  }
+  if (message.method === "turn/start") {
+    process.stdout.write(JSON.stringify({
+      method: "item/completed",
+      params: {
+        item: {
+          type: "dynamicToolCall",
+          id: "read-1",
+          status: "completed",
+          tool: "read_file",
+          arguments: {
+            filePath: "src/main/resources/application.yml",
+          },
+        },
+      },
+    }) + "\\n");
+    process.stdout.write(JSON.stringify({
+      method: "item/completed",
+      params: {
+        item: {
+          type: "commandExecution",
+          id: "cmd-1",
+          status: "completed",
+          command: "Get-Content -LiteralPath 'src/main/resources/application-druid.yml'",
+          cwd: process.cwd(),
         },
       },
     }) + "\\n");

@@ -5,7 +5,12 @@ import {
   deriveOpenTargets,
   isCollectibleArtifactTarget,
   selectAutoOpenTarget,
+  type OpenTarget,
 } from "../src/react-app/domains/session/artifacts/open-target";
+import {
+  canOpenArtifact,
+  getArtifactsFromMessages,
+} from "../src/lib/artifacts";
 
 function message(id: string, role: "user" | "assistant", text: string): UIMessage {
   return { id, role, parts: [{ type: "text", text, state: "done" }] };
@@ -73,6 +78,46 @@ describe("deriveOpenTargets", () => {
     ]);
 
     expect(targets[0]).toMatchObject({ value: "reports/summary.md", preview: "markdown", confidence: 95 });
+  });
+
+  it("extracts localized Windows CSV artifact summaries", () => {
+    const targets = deriveOpenTargets([
+      message("msg_1", "assistant", "已创建空CSV文件：C:\\sap_dev_work\\新建表格.csv"),
+    ]);
+
+    expect(targets[0]).toMatchObject({
+      value: "C:/sap_dev_work/新建表格.csv",
+      preview: "sheet",
+      confidence: 65,
+    });
+  });
+
+  it("marks localized Windows write artifacts openable after verification", () => {
+    const verifiedTargets: OpenTarget[] = [{
+      id: "file:新建表格.csv",
+      kind: "file",
+      value: "新建表格.csv",
+      name: "新建表格.csv",
+      preview: "sheet",
+      confidence: 95,
+      reason: "server",
+      exists: true,
+    }];
+    const artifacts = getArtifactsFromMessages([
+      toolMessage(
+        "msg_tool",
+        "write",
+        { filePath: "C:\\sap_dev_work\\新建表格.csv", content: "" },
+        { filepath: "C:\\sap_dev_work\\新建表格.csv", exists: true },
+      ),
+    ], verifiedTargets, { includeTargetFallbacks: false });
+
+    expect(artifacts[0]).toMatchObject({
+      name: "新建表格.csv",
+      path: "c:/sap_dev_work/新建表格.csv",
+      type: "sheet",
+    });
+    expect(artifacts[0] ? canOpenArtifact(artifacts[0]) : false).toBe(true);
   });
 
   it("keeps written unsupported files available for opening externally", () => {
@@ -168,7 +213,7 @@ describe("deriveOpenTargets", () => {
     expect(targets[0]).toMatchObject({ kind: "url", value: "https://example.com/docs/report.html", preview: "browser" });
   });
 
-  it("does not extract file artifacts from read tool metadata or output", () => {
+  it("extracts read tool metadata without scanning read output paths", () => {
     const targets = deriveOpenTargets([
       toolMessage(
         "msg_tool",
@@ -176,11 +221,18 @@ describe("deriveOpenTargets", () => {
         { filePath: "reports/source.md" },
         { content: "Reviewed reports/source.md and referenced reports/source.csv" },
       ),
-      message("msg_2", "assistant", "Reviewed reports/source.md and reports/source.csv."),
     ]);
 
-    expect(targets.map((target) => target.value)).not.toContain("reports/source.md");
+    expect(targets.map((target) => target.value)).toContain("reports/source.md");
     expect(targets.map((target) => target.value)).not.toContain("reports/source.csv");
+  });
+
+  it("extracts explicit assistant review summaries", () => {
+    const targets = deriveOpenTargets([
+      message("msg_1", "assistant", "Reviewed reports/source.md and reports/source.csv."),
+    ]);
+
+    expect(targets.map((target) => target.value).sort()).toEqual(["reports/source.csv", "reports/source.md"]);
   });
 
   it("extracts paths written by apply_patch metadata", () => {

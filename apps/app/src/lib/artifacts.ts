@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   isApplyPatchToolPart,
   isEditToolPart,
+  isReadToolPart,
   isWriteToolPart,
 } from "@/lib/build-in-tools";
 import { useOpenTargets } from "@/lib/target-provider";
@@ -220,8 +221,8 @@ function parseApplyPatchPaths(patchText: string) {
   return paths;
 }
 
-const FILE_PATTERN = /(?:^|[\s"'`([{])((?:\.{1,2}[/\\]|~[/\\]|[/\\])?[\w.\-]+(?:[/\\][\w.\-]+)+\.[a-z][a-z0-9]{0,9}|[\w.\-]+\.[a-z][a-z0-9]{0,9})/gi;
-const ASSISTANT_ARTIFACT_MENTION_PATTERN = /\b(?:artifact|created|deck|deliverable|exported|file|generated|opened|presentation|saved|slides?|updated|wrote)\b/i;
+const FILE_PATTERN = /(?:^|[\s"'`([{<:=：,，])((?:[a-zA-Z]:[/\\]|\.{1,2}[/\\]|~[/\\]|[/\\])?(?:[^/\\\s"'`()\[\]{}<>:：,，]+[/\\])+[^/\\\s"'`()\[\]{}<>:：,，]+\.[a-z][a-z0-9]{0,9}|[^/\\\s"'`()\[\]{}<>:：,，]+\.[a-z][a-z0-9]{0,9})/giu;
+const ASSISTANT_ARTIFACT_MENTION_PATTERN = /\b(?:artifact|analyzed|created|deck|deliverable|exported|file|generated|inspected|opened|presentation|read|reviewed|reviewing|saved|slides?|updated|wrote)\b|(?:文件|已创建|创建|保存|写入|更新|生成|导出|表格|阅读|读取|查看|检查|分析|审阅|代码|配置)/iu;
 
 function getArtifactPathsFromText(text: string) {
   if (!ASSISTANT_ARTIFACT_MENTION_PATTERN.test(text)) return [];
@@ -256,6 +257,11 @@ function getArtifactPathsFromMessage(message: UIMessage) {
     }
 
     if (part.type !== "dynamic-tool" || part.state !== "output-available") {
+      continue;
+    }
+
+    if (isReadToolPart(part)) {
+      paths.push(part.input.filePath);
       continue;
     }
 

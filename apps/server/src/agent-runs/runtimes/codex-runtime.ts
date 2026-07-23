@@ -1,4 +1,4 @@
-import { dirname } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { containsNeedle, extractText, isJsonObject, readNestedString, readString, type JsonObject, type JsonValue, StdioJsonRpcClient } from "../json-rpc.js";
 import { cachedMcpUrlReachable } from "../mcp-reachability-cache.js";
 import { isRuntimeCommandAvailable, missingRuntimeCommandMessage, resolveCodexCommand, resolveCodexModelProvider, resolveRuntimeEnv } from "../runtime-config.js";
@@ -213,6 +213,7 @@ function handleThreadItem(item: JsonValue | undefined, isCompleted: boolean, emi
   if (type === "commandExecution") {
     const command = readString(item, "command");
     const cwd = readString(item, "cwd");
+    const files = commandFilePaths(command, cwd);
     emit({
       type: "tool_call",
       runtime: "codex",
@@ -220,7 +221,7 @@ function handleThreadItem(item: JsonValue | undefined, isCompleted: boolean, emi
       title: command || "Run command",
       text: cwd,
       status,
-      details: codexThreadItemDetails(type, itemId, "command", { command, cwd }),
+      details: codexThreadItemDetails(type, itemId, "command", files.length > 0 ? { command, cwd, files } : { command, cwd }),
     });
     return true;
   }
@@ -228,14 +229,16 @@ function handleThreadItem(item: JsonValue | undefined, isCompleted: boolean, emi
     const tool = readString(item, "tool");
     const skillName = dynamicToolSkillName(item);
     const title = dynamicToolTitle(item);
+    const path = dynamicToolPath(item);
     const text = jsonPreview(readJsonField(item, "arguments"));
     const details: Record<string, unknown> = codexThreadItemDetails(
       type,
       itemId,
-      skillName ? "skill_load" : "tool",
+      dynamicToolActivityKind(tool, skillName, path),
       { tool },
     );
     if (skillName) details.skill = skillName;
+    if (path) details.path = path;
     emit({
       type: "tool_call",
       runtime: "codex",
@@ -418,6 +421,54 @@ function dynamicToolSkillName(item: JsonValue | undefined): string {
   const tool = readString(item, "tool");
   if (normalizeToolName(tool) !== "skill") return "";
   return readNestedString(item, ["arguments", "name"]);
+}
+
+function dynamicToolPath(item: JsonValue | undefined): string {
+  const candidates = [
+    readNestedString(item, ["arguments", "path"]),
+    readNestedString(item, ["arguments", "filePath"]),
+    readNestedString(item, ["arguments", "file_path"]),
+    readNestedString(item, ["arguments", "file"]),
+    readNestedString(item, ["arguments", "filename"]),
+  ];
+  return candidates.find((candidate) => candidate.trim()) ?? "";
+}
+
+function dynamicToolActivityKind(tool: string, skillName: string, path: string): string {
+  if (skillName) return "skill_load";
+  if (!path) return "tool";
+  const normalized = normalizeToolName(tool);
+  if (normalized.includes("read") || normalized === "view" || normalized === "open") return "file_read";
+  if (normalized.includes("write") || normalized.includes("edit") || normalized.includes("patch")) return "file_edit";
+  return "tool";
+}
+
+const COMMAND_FILE_PATTERN = /(?:^|[\s"'`([{<:=])((?:[a-zA-Z]:[/\\]|\.{1,2}[/\\]|~[/\\]|[/\\])?(?:[^/\\\s"'`()\[\]{}<>:]+[/\\])+[^/\\\s"'`()\[\]{}<>:]+\.[a-z][a-z0-9]{0,9}|[^/\\\s"'`()\[\]{}<>:]+\.[a-z][a-z0-9]{0,9})/giu;
+
+function commandFilePaths(command: string, cwd: string): string[] {
+  if (!commandMayReadFiles(command)) return [];
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  COMMAND_FILE_PATTERN.lastIndex = 0;
+  for (const match of command.matchAll(COMMAND_FILE_PATTERN)) {
+    const rawPath = match[1]?.trim();
+    if (!rawPath || rawPath.includes("*")) continue;
+    const path = commandPathFromCwd(rawPath, cwd);
+    const key = path.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    paths.push(path);
+  }
+  return paths;
+}
+
+function commandMayReadFiles(command: string): boolean {
+  return /(?:^|[;&|]\s*)(?:get-content|gc|cat|type|more|head|tail|sed)\b/i.test(command);
+}
+
+function commandPathFromCwd(path: string, cwd: string): string {
+  if (!cwd || isAbsolute(path) || path.startsWith("~")) return path;
+  return join(cwd, path);
 }
 
 function planStatusLabel(status: string): string {

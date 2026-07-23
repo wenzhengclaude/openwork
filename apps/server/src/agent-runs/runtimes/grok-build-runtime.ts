@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { containsNeedle, extractText, isJsonObject, readNestedString, readString, type JsonObject, type JsonValue, StdioJsonRpcClient } from "../json-rpc.js";
@@ -1009,11 +1009,13 @@ function grokToolEvent(value: JsonValue | undefined): { title: string; text: str
     sourceType: grokSourceType(value),
     activityKind,
   };
+  const files = commandFilePaths(command, cwd);
   if (toolName) details.tool = toolName;
   if (skillName) details.skill = skillName;
   if (command) details.command = command;
   if (cwd) details.cwd = cwd;
   if (path) details.path = path;
+  if (files.length > 0) details.files = files;
   if (description) details.description = description;
   return {
     title,
@@ -1041,6 +1043,34 @@ function grokToolActivityKind(toolName: string, skillName: string, command: stri
   if (path && normalized.includes("read")) return "file_read";
   if (path && normalized.includes("write")) return "file_write";
   return "tool";
+}
+
+const COMMAND_FILE_PATTERN = /(?:^|[\s"'`([{<:=])((?:[a-zA-Z]:[/\\]|\.{1,2}[/\\]|~[/\\]|[/\\])?(?:[^/\\\s"'`()\[\]{}<>:]+[/\\])+[^/\\\s"'`()\[\]{}<>:]+\.[a-z][a-z0-9]{0,9}|[^/\\\s"'`()\[\]{}<>:]+\.[a-z][a-z0-9]{0,9})/giu;
+
+function commandFilePaths(command: string, cwd: string): string[] {
+  if (!commandMayReadFiles(command)) return [];
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  COMMAND_FILE_PATTERN.lastIndex = 0;
+  for (const match of command.matchAll(COMMAND_FILE_PATTERN)) {
+    const rawPath = match[1]?.trim();
+    if (!rawPath || rawPath.includes("*")) continue;
+    const path = commandPathFromCwd(rawPath, cwd);
+    const key = path.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    paths.push(path);
+  }
+  return paths;
+}
+
+function commandMayReadFiles(command: string): boolean {
+  return /(?:^|[;&|]\s*)(?:get-content|gc|cat|type|more|head|tail|sed)\b/i.test(command);
+}
+
+function commandPathFromCwd(path: string, cwd: string): string {
+  if (!cwd || isAbsolute(path) || path.startsWith("~")) return path;
+  return join(cwd, path);
 }
 
 function grokToolName(value: JsonValue | undefined): string {

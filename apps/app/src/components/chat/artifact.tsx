@@ -22,27 +22,26 @@ interface ArtifactButtonProps {
   artifact: ArtifactItem
 }
 
-const MAX_ARTIFACT_TITLE_LENGTH = 20;
-
-function compactArtifactTitle(name: string) {
-  return name.length > MAX_ARTIFACT_TITLE_LENGTH
-    ? `${name.slice(0, MAX_ARTIFACT_TITLE_LENGTH - 1)}…`
-    : name;
-}
-
 function ArtifactButton({ artifact }: ArtifactButtonProps) {
   const previewArtifact = usePreviewArtifact();
   const canOpen = canOpenArtifact(artifact);
   const canPreview = canPreviewArtifact(artifact);
-  const title = compactArtifactTitle(artifact.name);
+  const detail = artifact.path !== artifact.name ? artifact.path : "";
 
   const content = (
     <>
       <DescriptiveButtonIcon className="size-5">
         <ArtifactIcon className="size-4 shrink-0" type={artifact.type} />
       </DescriptiveButtonIcon>
-      <DescriptiveButtonContent className="min-w-0 flex-none">
-        <DescriptiveButtonTitle className="max-w-32 text-xs font-medium" title={artifact.name}>{title}</DescriptiveButtonTitle>
+      <DescriptiveButtonContent className="min-w-0 flex-1">
+        <DescriptiveButtonTitle className="line-clamp-2 max-w-56 whitespace-normal break-all text-xs font-medium" title={artifact.path}>
+          {artifact.name}
+        </DescriptiveButtonTitle>
+        {detail ? (
+          <span className="line-clamp-1 max-w-56 break-all text-[11px] leading-4 text-muted-foreground" title={artifact.path}>
+            {detail}
+          </span>
+        ) : null}
       </DescriptiveButtonContent>
       {canOpen ? <ArrowUpRightIcon className="size-3.5 shrink-0 text-muted-foreground" /> : null}
     </>
@@ -50,7 +49,7 @@ function ArtifactButton({ artifact }: ArtifactButtonProps) {
 
   if (!canOpen) {
     return (
-      <div className="flex h-auto w-fit max-w-full flex-none shrink-0 items-center justify-start gap-1.5 rounded-xl border border-border px-2 py-1.5 text-left whitespace-nowrap">
+      <div className="flex h-auto w-fit max-w-full flex-none shrink-0 items-center justify-start gap-1.5 rounded-xl border border-border px-2 py-1.5 text-left whitespace-normal">
         {content}
       </div>
     );
@@ -58,7 +57,7 @@ function ArtifactButton({ artifact }: ArtifactButtonProps) {
 
   return (
     <DescriptiveButton
-      className="w-fit max-w-full flex-none items-center gap-1.5 rounded-xl px-2 py-1.5 whitespace-nowrap"
+      className="w-fit max-w-full flex-none items-center gap-1.5 rounded-xl px-2 py-1.5 whitespace-normal"
       onClick={() => previewArtifact(artifact)}
       title={canPreview ? `Preview ${artifact.name}` : `Open ${artifact.name}`}
     >
@@ -81,7 +80,7 @@ export function ArtifactList({ messages, includeTargetFallbacks = false }: Artif
 
   return (
     <div className="mx-auto w-full max-w-3xl px-2 md:px-10">
-      <div className="no-scrollbar flex min-w-0 flex-nowrap gap-2 overflow-x-auto pb-1">
+      <div className="flex min-w-0 flex-wrap gap-2 pb-1">
         {artifacts.map((artifact) => (
           <ArtifactButton key={artifact.id} artifact={artifact} />
         ))}

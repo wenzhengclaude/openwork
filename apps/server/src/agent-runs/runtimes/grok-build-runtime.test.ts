@@ -526,6 +526,7 @@ describe("GrokBuildRuntime", () => {
     expect(commandEvent?.details?.tool).toBe("run_terminal_command");
     expect(commandEvent?.details?.command).toBe("Get-Content -LiteralPath 'C:\\sap_dev_work\\settings.json'");
     expect(commandEvent?.details?.cwd).toBe(dir);
+    expect(commandEvent?.details?.files).toEqual(["C:\\sap_dev_work\\settings.json"]);
     expect(commandEvent?.details?.sourceProtocol).toBe("grok-acp-session-update");
     expect(commandEvent?.details?.sourceType).toBe("tool_call_update");
     expect(commandEvent?.details?.activityKind).toBe("command");

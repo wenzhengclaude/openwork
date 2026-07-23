@@ -73,6 +73,36 @@ describe("getArtifactsFromMessages", () => {
     ]);
   });
 
+  it("lists read tool files without scanning read output paths", () => {
+    const messages: UIMessage[] = [{
+      id: "msg_read",
+      role: "assistant",
+      parts: [{
+        type: "dynamic-tool",
+        toolName: "read",
+        toolCallId: "read_1",
+        state: "output-available",
+        input: { filePath: "src/main/resources/application.yml" },
+        output: { content: "spring.config.import=application-druid.yml" },
+      }],
+    }];
+    const targets: OpenTarget[] = [{
+      id: "file:src/main/resources/application.yml",
+      kind: "file",
+      value: "src/main/resources/application.yml",
+      name: "application.yml",
+      preview: "text",
+      confidence: 95,
+      reason: "read tool metadata",
+      exists: true,
+    }];
+
+    const artifacts = getArtifactsFromMessages(messages, targets, { includeTargetFallbacks: false });
+
+    expect(artifacts.map((artifact) => artifact.path)).toEqual(["src/main/resources/application.yml"]);
+    expect(canOpenArtifact(artifacts[0])).toBe(true);
+  });
+
   it("orders verified artifacts by newest update time and marks unsupported previews", () => {
     const messages: UIMessage[] = [{
       id: "msg_order",

@@ -31,14 +31,19 @@ export type OpenTarget = {
 const WORKSPACES_PREFIX_PATTERN = /^workspaces\/[^/]+\//i;
 const WORKSPACE_ID_PREFIX_PATTERN = /^workspace\/(?:ws_[^/]+|\d+|[0-9a-f-]{6,})\//i;
 
-const FILE_PATTERN = /(?:^|[\s"'`([{])((?:\.{1,2}[/\\]|~[/\\]|[/\\])?[\w.\-]+(?:[/\\][\w.\-]+)+\.[a-z][a-z0-9]{0,9}|[\w.\-]+\.[a-z][a-z0-9]{0,9})/gi;
+const FILE_PATTERN = /(?:^|[\s"'`([{<:=：,，])((?:[a-zA-Z]:[/\\]|\.{1,2}[/\\]|~[/\\]|[/\\])?(?:[^/\\\s"'`()\[\]{}<>:：,，]+[/\\])+[^/\\\s"'`()\[\]{}<>:：,，]+\.[a-z][a-z0-9]{0,9}|[^/\\\s"'`()\[\]{}<>:：,，]+\.[a-z][a-z0-9]{0,9})/giu;
 const URL_PATTERN = /https?:\/\/[^\s)\]}>"'`]+/gi;
 const SOCKET_PATTERN = /(?:ws|wss):\/\/[^\s)\]}>"'`]+/gi;
 const SIDEBAR_ARTIFACT_FILE_PREVIEWS = new Set<OpenTargetPreview>(["markdown", "sheet", "slides", "image", "pdf", "html"]);
 const MARKDOWN_LINK_PATTERN = /\[([^\]\n]+)\]\(([^)\s]+)\)/g;
-const ASSISTANT_ARTIFACT_MENTION_PATTERN = /\b(?:artifact|created|deck|deliverable|exported|file|generated|opened|presentation|saved|slides?|updated|wrote)\b/i;
+const ASSISTANT_ARTIFACT_MENTION_PATTERN = /\b(?:artifact|analyzed|created|deck|deliverable|exported|file|generated|inspected|opened|presentation|read|reviewed|reviewing|saved|slides?|updated|wrote)\b|(?:文件|已创建|创建|保存|写入|更新|生成|导出|表格|阅读|读取|查看|检查|分析|审阅|代码|配置)/iu;
 const DISCOVERY_TOOL_NAMES = new Set(["glob", "grep", "search", "find"]);
 const ARTIFACT_METADATA_TOOL_NAMES = new Set(["openwork_extension_call"]);
+const READ_TOOL_NAMES = new Set([
+  "read",
+  "read_file",
+  "view",
+]);
 const WRITE_TOOL_NAMES = new Set([
   "apply_patch",
   "edit",
@@ -116,6 +121,10 @@ function targetFromFile(path: string, confidence: number, reason: string): OpenT
     confidence,
     reason,
   };
+}
+
+export function openTargetFromFileCandidate(path: string, confidence: number, reason: string): OpenTarget | null {
+  return targetFromFile(path, confidence, reason);
 }
 
 function targetFromUrl(url: string, confidence: number, reason: string): OpenTarget | null {
@@ -231,6 +240,10 @@ function isWriteTool(toolName: string) {
   return WRITE_TOOL_NAMES.has(normalizedToolName(toolName));
 }
 
+function isReadTool(toolName: string) {
+  return READ_TOOL_NAMES.has(normalizedToolName(toolName));
+}
+
 function isArtifactMetadataTool(toolName: string) {
   return ARTIFACT_METADATA_TOOL_NAMES.has(normalizedToolName(toolName));
 }
@@ -307,8 +320,18 @@ export function deriveOpenTargets(messages: UIMessage[], options: DeriveOpenTarg
       }
 
       const discoveryTool = isDiscoveryTool(part.toolName);
+      const readTool = isReadTool(part.toolName);
       const writeTool = isWriteTool(part.toolName);
       const artifactMetadataTool = isArtifactMetadataTool(part.toolName);
+
+      if (readTool) {
+        addFileValues(
+          targets,
+          collectFileMetadataValues(part.input),
+          95,
+          "read tool metadata",
+        );
+      }
 
       if (writeTool) {
         addFileValues(
